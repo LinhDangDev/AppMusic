@@ -1,34 +1,33 @@
+const musicService = require('../services/musicService');
 
-import { Controller } from 'stimulus';
-
-export default class extends Controller {
-  static targets = ['playButton', 'pauseButton', 'stopButton', 'volumeSlider'];
-
-  connect() {
-    this.audio = new Audio(this.data.get('src'));
-    this.audio.addEventListener('ended', this.stop.bind(this));
+exports.searchSongs = async (req, res) => {
+  try {
+    const { query } = req.query;
+    const songs = await musicService.searchSong(query);
+    res.json(songs);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to search songs' });
   }
+};
 
-  play() {
-    this.audio.play();
-    this.playButtonTarget.classList.add('hidden');
-    this.pauseButtonTarget.classList.remove('hidden');
-  }
+exports.getStreamingUrl = async (req, res) => {
+  try {
+    const { songId } = req.params;
+    const { userId } = req.user;
 
-  pause() {
-    this.audio.pause();
-    this.playButtonTarget.classList.remove('hidden');
-    this.pauseButtonTarget.classList.add('hidden');
-  }
+    const streamData = await musicService.getStreamingData(songId);
+    
+    // Lưu lịch sử nghe nhạc
+    await musicService.savePlayHistory(userId, {
+      songId: songId,
+      title: streamData.title,
+      artist: streamData.artist
+    });
 
-  stop() {
-    this.audio.pause();
-    this.audio.currentTime = 0;
-    this.playButtonTarget.classList.remove('hidden');
-    this.pauseButtonTarget.classList.add('hidden');
+    res.json(streamData);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to get streaming URL' });
   }
-
-  adjustVolume() {
-    this.audio.volume = this.volumeSliderTarget.value / 100;
-  }
-}
+};

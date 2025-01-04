@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'dart:ui';
+import 'player_screen.dart';
+import 'search_screen.dart';
+import 'library_screen.dart';
+import 'premium_screen.dart';
+import 'package:melody/constants/app_colors.dart';
+import 'package:melody/widgets/bottom_player_nav.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -8,7 +14,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  ScrollController _scrollController = ScrollController();
+  final ScrollController _scrollController = ScrollController();
   double _scrollOpacity = 0.0;
 
   @override
@@ -25,344 +31,167 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onScroll() {
     final offset = _scrollController.offset;
-    // Điều chỉnh độ trong suốt dựa trên vị trí cuộn
     final opacity = (offset / 350).clamp(0.0, 1.0);
     setState(() {
       _scrollOpacity = opacity;
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Background gradient
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF353340),
-                  Color(0xFF161718),
-                  Color(0xFF353340),
-                ],
-                stops: [0.0, 0.6, 1.0],
+  void _showSettingsDrawer() {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '',
+      transitionDuration: Duration(milliseconds: 200),
+      pageBuilder: (context, animation1, animation2) {
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.85,
+              height: MediaQuery.of(context).size.height,
+              decoration: BoxDecoration(
+                color: Color(0xFF282828),
+              ),
+              child: SafeArea(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildUserProfileSection(),
+                      _buildMenuItems(),
+                      SizedBox(height: 32),
+                      _buildNotificationsSection(),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        var begin = Offset(-1.0, 0.0);
+        var end = Offset.zero;
+        var curve = Curves.easeInOut;
+        var tween =
+            Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+        return SlideTransition(
+          position: animation.drive(tween),
+          child: child,
+        );
+      },
+    );
+  }
 
-          // Main content with sticky header
-          SafeArea(
-            child: CustomScrollView(
-              controller: _scrollController, // Thêm controller
-              slivers: [
-                // Sticky header với background color
-                SliverAppBar(
-                  backgroundColor: Color(0xFF161718).withOpacity(
-                      _scrollOpacity), // Màu nền thay đổi theo scroll
-                  pinned: true,
-                  elevation: 0,
-                  flexibleSpace: Container(
-                    padding: EdgeInsets.all(16.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Good afternoon',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Row(
-                          children: [
-                            CircleAvatar(
-                              backgroundColor: Colors.grey[800],
-                              child: Icon(Icons.notifications,
-                                  color: Colors.white),
-                            ),
-                            SizedBox(width: 10),
-                            CircleAvatar(
-                              backgroundColor: Colors.grey[800],
-                              child: Icon(Icons.settings, color: Colors.white),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Scrollable content
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Recently played section
-                        SectionTitle('Recently played'),
-                        SizedBox(height: 10),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              RecentlyPlayedCard(
-                                imageUrl: 'assets/playlist1.png',
-                                title: 'Mega Hit Mix',
-                              ),
-                              // Add more cards...
-
-                              RecentlyPlayedCard(
-                                imageUrl: 'assets/playlist1.png',
-                                title: 'Mega Hit Mix',
-                              ),
-                              RecentlyPlayedCard(
-                                imageUrl: 'assets/playlist1.png',
-                                title: 'Mega Hit Mix',
-                              ),
-                              RecentlyPlayedCard(
-                                imageUrl: 'assets/playlist1.png',
-                                title: 'Mega Hit Mix',
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // To get you started section
-                        SectionTitle('To get you started'),
-                        SizedBox(height: 15),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              PlaylistCard(
-                                imageUrl: 'assets/playlist1.png',
-                                title: 'Daily Mix 1',
-                                subtitle:
-                                    'Six60, Mitch James, Tiki Taane And More',
-                              ),
-                              SizedBox(width: 12),
-                              PlaylistCard(
-                                imageUrl: 'assets/playlist1.png',
-                                title: 'Daily Mix 2',
-                                subtitle:
-                                    'Six60, Mitch James, Tiki Taane And More',
-                              ),
-                              SizedBox(width: 12),
-                              PlaylistCard(
-                                imageUrl: 'assets/playlist1.png',
-                                title: 'Daily Mix 3',
-                                subtitle:
-                                    'Six60, Mitch James, Tiki Taane And More',
-                              ),
-                              SizedBox(width: 12),
-                              PlaylistCard(
-                                imageUrl: 'assets/playlist1.png',
-                                title: 'Daily Mix 4',
-                                subtitle:
-                                    'Six60, Mitch James, Tiki Taane And More',
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // Today's Biggest Hits section
-                        SizedBox(height: 32),
-                        SectionTitle("Today's Biggest Hits"),
-                        SizedBox(height: 15),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              PlaylistCard(
-                                imageUrl: 'assets/playlist1.png',
-                                title: 'Adam French, Bella',
-                                subtitle: 'M1, Twiceyoung And',
-                              ),
-                              SizedBox(width: 12),
-                              PlaylistCard(
-                                imageUrl: 'assets/playlist1.png',
-                                title: 'Canyon City, Marc',
-                                subtitle: 'Scibilia, Oh Honey And',
-                              ),
-                              SizedBox(width: 12),
-                              PlaylistCard(
-                                imageUrl: 'assets/playlist1.png',
-                                title: 'Six60',
-                                subtitle: 'Tiki Taa',
-                              ),
-                              SizedBox(width: 12),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+  Widget _buildUserProfileSection() {
+    return Container(
+      padding: EdgeInsets.all(16),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: Colors.blue,
+            radius: 30,
+            child: Text(
+              'S',
+              style: TextStyle(
+                fontSize: 24,
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
-
-          // Bottom navigation area with blur effect
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: ClipRect(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Mini Player
-                    Container(
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      color: Colors.black.withOpacity(0.5),
-                      child: Row(
-                        children: [
-                          // Album art
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: Image.asset(
-                              'assets/playlist1.png',
-                              width: 40,
-                              height: 40,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                          SizedBox(width: 12),
-                          // Song info
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  "Die With A Smile ",
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                Text(
-                                  "Lady Gaga & Bruno Mars",
-                                  style: TextStyle(
-                                    color: Colors.grey[400],
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          // Control buttons
-                          Row(
-                            children: [
-                              IconButton(
-                                icon: Icon(Icons.pause, color: Colors.white),
-                                onPressed: () {},
-                              ),
-                              IconButton(
-                                icon: Icon(Icons.favorite_border,
-                                    color: Colors.white),
-                                onPressed: () {},
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Progress bar
-                    Container(
-                      height: 2,
-                      child: LinearProgressIndicator(
-                        value: 0.7,
-                        backgroundColor: Colors.grey[800],
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                      ),
-                    ),
-                    // Navigation bar
-                    Container(
-                      margin: EdgeInsets.fromLTRB(16, 8, 16, 16),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.black.withOpacity(0.3),
-                            Colors.black.withOpacity(0.7),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(25),
-                      ),
-                      child: Theme(
-                        data: Theme.of(context).copyWith(
-                          canvasColor: Colors.transparent,
-                        ),
-                        child: BottomNavigationBar(
-                          backgroundColor: Colors.transparent,
-                          elevation: 0,
-                          selectedItemColor: Colors.white,
-                          unselectedItemColor: Colors.grey,
-                          type: BottomNavigationBarType.fixed,
-                          items: [
-                            BottomNavigationBarItem(
-                              icon: Container(
-                                padding: EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[900]?.withOpacity(0.5),
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                child: Icon(Icons.home),
-                              ),
-                              label: 'Home',
-                            ),
-                            BottomNavigationBarItem(
-                              icon: Container(
-                                padding: EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[900]?.withOpacity(0.5),
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                child: Icon(Icons.search),
-                              ),
-                              label: 'Search',
-                            ),
-                            BottomNavigationBarItem(
-                              icon: Container(
-                                padding: EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[900]?.withOpacity(0.5),
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                child: Icon(Icons.library_music),
-                              ),
-                              label: 'Your Library',
-                            ),
-                            BottomNavigationBarItem(
-                              icon: Container(
-                                padding: EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[900]?.withOpacity(0.5),
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                child: Icon(Icons.person),
-                              ),
-                              label: 'Premium',
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+          SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Suchir',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
                 ),
+              ),
+              Text(
+                '0 Followers • 84 Following',
+                style: TextStyle(
+                  color: Colors.grey[400],
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMenuItems() {
+    return Column(
+      children: [
+        _buildMenuItem(Icons.person_outline, 'Profile'),
+        _buildMenuItem(Icons.history, 'Recently played'),
+        _buildMenuItem(Icons.settings, 'Settings and privacy'),
+      ],
+    );
+  }
+
+  Widget _buildMenuItem(IconData icon, String title) {
+    return ListTile(
+      leading: Container(
+        padding: EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: Icon(icon, color: Colors.white),
+      ),
+      title: Text(title, style: TextStyle(color: Colors.white)),
+      onTap: () => Navigator.pop(context),
+    );
+  }
+
+  Widget _buildNotificationsSection() {
+    return Padding(
+      padding: EdgeInsets.all(8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Notifications',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            "You don't have any updates, yet...",
+            style: TextStyle(color: Colors.grey[400]),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'When you get playlist likes, followers,\nand more, you ll get a notification here.',
+            style: TextStyle(color: Colors.grey[400], fontSize: 12),
+          ),
+          SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                padding: EdgeInsets.symmetric(vertical: 12),
+              ),
+              onPressed: () {},
+              child: Text(
+                'Create a Blend',
+                style: TextStyle(color: Colors.white),
               ),
             ),
           ),
@@ -370,9 +199,166 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: AppColors.backgroundGradient,
+        ),
+        child: Stack(
+          children: [
+            SafeArea(
+              child: CustomScrollView(
+                controller: _scrollController,
+                slivers: [
+                  _buildSliverAppBar(),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SectionTitle('Recently played'),
+                          SizedBox(height: 10),
+                          _buildRecentlyPlayed(),
+                          SectionTitle('To get you started'),
+                          SizedBox(height: 15),
+                          _buildPlaylists(),
+                          SizedBox(height: 32),
+                          SectionTitle("Today's Biggest Hits"),
+                          SizedBox(height: 15),
+                          _buildBiggestHits(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: BottomPlayerNav(currentIndex: 0),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSliverAppBar() {
+    return SliverAppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      title: Text(
+        'Good afternoon',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      actions: [
+        IconButton(
+          icon: Icon(Icons.notifications_none, color: Colors.white),
+          onPressed: () {},
+        ),
+        IconButton(
+          icon: Icon(Icons.settings, color: Colors.white),
+          onPressed: _showSettingsDrawer,
+        ),
+        SizedBox(width: 8),
+      ],
+    );
+  }
+
+  Widget _buildRecentlyPlayed() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _buildRecentlyPlayedCard(),
+          _buildRecentlyPlayedCard(),
+          _buildRecentlyPlayedCard(),
+          _buildRecentlyPlayedCard(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecentlyPlayedCard() {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => PlayerScreen()),
+        );
+      },
+      child: RecentlyPlayedCard(
+        imageUrl: 'assets/playlist1.png',
+        title: 'Mega Hit Mix',
+      ),
+    );
+  }
+
+  Widget _buildPlaylists() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _buildPlaylistCard(
+              'Daily Mix 1', 'Six60, Mitch James, Tiki Taane And More'),
+          SizedBox(width: 12),
+          _buildPlaylistCard(
+              'Daily Mix 2', 'Six60, Mitch James, Tiki Taane And More'),
+          SizedBox(width: 12),
+          _buildPlaylistCard(
+              'Daily Mix 3', 'Six60, Mitch James, Tiki Taane And More'),
+          SizedBox(width: 12),
+          _buildPlaylistCard(
+              'Daily Mix 4', 'Six60, Mitch James, Tiki Taane And More'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlaylistCard(String title, String subtitle) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => PlayerScreen()),
+        );
+      },
+      child: PlaylistCard(
+        imageUrl: 'assets/playlist1.png',
+        title: title,
+        subtitle: subtitle,
+      ),
+    );
+  }
+
+  Widget _buildBiggestHits() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _buildPlaylistCard('Adam French, Bella', 'M1, Twiceyoung And'),
+          SizedBox(width: 12),
+          _buildPlaylistCard('Canyon City, Marc', 'Scibilia, Oh Honey And'),
+          SizedBox(width: 12),
+          _buildPlaylistCard('Six60', 'Tiki Taa'),
+          SizedBox(width: 12),
+        ],
+      ),
+    );
+  }
 }
 
-// Custom widgets
 class SectionTitle extends StatelessWidget {
   final String title;
 
@@ -416,7 +402,7 @@ class RecentlyPlayedCard extends StatelessWidget {
               fit: BoxFit.cover,
             ),
           ),
-          SizedBox(height: 4), // Reduced from 8 to 4 to fix overflow
+          SizedBox(height: 4),
           Text(
             title,
             style: TextStyle(
@@ -444,8 +430,8 @@ class PlaylistCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 200, // Giữ nguyên chiều rộng
-      height: 260, // Giảm chiều cao xuống
+      width: 200,
+      height: 260,
       decoration: BoxDecoration(
         color: Color(0xFF282828),
         borderRadius: BorderRadius.circular(8),
@@ -453,7 +439,6 @@ class PlaylistCard extends StatelessWidget {
       clipBehavior: Clip.hardEdge,
       child: Column(
         children: [
-          // Phần hình ảnh
           Expanded(
             flex: 3,
             child: Container(
@@ -464,13 +449,11 @@ class PlaylistCard extends StatelessWidget {
               ),
             ),
           ),
-          // Phần text
           Expanded(
             flex: 1,
             child: Container(
               width: double.infinity,
-              padding: EdgeInsets.symmetric(
-                  horizontal: 8, vertical: 4), // Giảm padding
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -479,18 +462,18 @@ class PlaylistCard extends StatelessWidget {
                     title,
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 13, // Giảm font size
+                      fontSize: 13,
                       fontWeight: FontWeight.w500,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  SizedBox(height: 2), // Giảm khoảng cách
+                  SizedBox(height: 2),
                   Text(
                     subtitle,
                     style: TextStyle(
                       color: Colors.grey[400],
-                      fontSize: 11, // Giảm font size
+                      fontSize: 11,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,

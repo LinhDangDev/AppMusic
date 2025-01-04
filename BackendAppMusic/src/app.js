@@ -5,6 +5,8 @@ const userRoutes = require('./routes/userRoutes');
 const musicRoutes = require('./routes/musicRoutes');
 const playlistRoutes = require('./routes/playlistRoutes');
 const errorHandler = require('./middleware/errorHandler');
+const musicService = require('./services/musicService');
+const rankingService = require('./services/rankingService');
 
 const app = express();
 
@@ -19,6 +21,18 @@ app.use('/api/playlists', playlistRoutes);
 
 // Error handling
 app.use(errorHandler);
+
+// Initialize services
+(async () => {
+  try {
+    await musicService.initialize();
+    rankingService.startScheduledUpdates();
+    console.log('Services initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize services:', error);
+    process.exit(1);
+  }
+})();
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

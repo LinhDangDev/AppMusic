@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:melody/screens/home_screen.dart';
 import 'screens/home_screen.dart';
 
 void main() {
@@ -16,6 +17,10 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         scaffoldBackgroundColor: Colors.black,
+        bottomSheetTheme: BottomSheetThemeData(
+          backgroundColor: Colors.transparent,
+          modalBackgroundColor: Colors.transparent,
+        ),
         useMaterial3: true,
       ),
       home: HomeScreen(),

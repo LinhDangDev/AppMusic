@@ -1,30 +1,39 @@
+drop database app_music;
+
 CREATE DATABASE App_music;
 
 USE App_music;
 
 CREATE TABLE Artists (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+    id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(255) NOT NULL,
-    image_url TEXT,
     bio TEXT,
-    profile_pic_url TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_artist_name (name)
+    image_url VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
 CREATE TABLE Music (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+    id INT PRIMARY KEY AUTO_INCREMENT,
     title VARCHAR(255) NOT NULL,
-    artist_id INT NOT NULL,
-    image_url TEXT,
-    album VARCHAR(255),
-    genre VARCHAR(255),
-    s3_url TEXT,
+    artist_id INT,
     duration INT,
-    lyrics TEXT,
+    release_date DATE,
+    genre VARCHAR(100),
+    audio_url VARCHAR(255),
+    image_url VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (artist_id) REFERENCES Artists(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_song (title, artist_id)
+    FOREIGN KEY (artist_id) REFERENCES Artists(id)
+);
+CREATE TABLE Songs (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    title VARCHAR(255) NOT NULL,
+    artist_id INT,
+    duration INT,
+    release_date DATE,
+    genre VARCHAR(100),
+    audio_url VARCHAR(255),
+    image_url VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (artist_id) REFERENCES Artists(id)
 );
 
 CREATE TABLE Users (
