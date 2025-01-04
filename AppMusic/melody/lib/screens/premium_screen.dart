@@ -15,6 +15,9 @@ class PremiumScreen extends StatelessWidget {
         child: Stack(
           children: [
             SingleChildScrollView(
+              padding: EdgeInsets.only(
+                bottom: 150.0,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

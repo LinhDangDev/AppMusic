@@ -7,6 +7,8 @@ import 'library_screen.dart';
 import 'premium_screen.dart';
 import 'package:melody/constants/app_colors.dart';
 import 'package:melody/widgets/bottom_player_nav.dart';
+import 'package:melody/models/genre.dart';
+import 'package:melody/widgets/genre_card.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -16,6 +18,32 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
   double _scrollOpacity = 0.0;
+  final List<Genre> genres = [
+    Genre(name: 'Romance', borderColor: Colors.red),
+    Genre(name: 'Sad', borderColor: Colors.grey),
+    Genre(name: 'R&B & Soul', borderColor: Colors.purple),
+    Genre(name: 'Party', borderColor: Colors.deepPurple),
+    Genre(name: 'Mandopop & Cantopop', borderColor: Colors.orange),
+    Genre(name: 'Folk & Acoustic', borderColor: Colors.green),
+    Genre(name: 'K-Pop', borderColor: Colors.purple),
+    Genre(name: 'Feel Good', borderColor: Colors.lightGreen),
+    Genre(name: 'Hip-Hop', borderColor: Colors.deepOrange),
+    Genre(name: 'Sleep', borderColor: Colors.purple),
+    Genre(name: 'Workout', borderColor: Colors.orange),
+    Genre(name: 'Family', borderColor: Colors.cyan),
+    Genre(name: 'Commute', borderColor: Colors.amber),
+    Genre(name: 'Chill', borderColor: Colors.lightBlue),
+    Genre(name: 'Focus', borderColor: Colors.white),
+    Genre(name: 'Dance & Electronic', borderColor: Colors.cyan),
+    Genre(name: 'Classical', borderColor: Colors.grey),
+    Genre(name: '2000s', borderColor: Colors.green),
+    Genre(name: 'Pop', borderColor: Colors.pink),
+    Genre(name: 'Korean Hip-Hop', borderColor: Colors.orange),
+    Genre(name: 'Energy Boosters', borderColor: Colors.yellow),
+    Genre(name: 'Soundtracks & Musicals', borderColor: Colors.cyan),
+    Genre(name: '1980s', borderColor: Colors.green),
+    Genre(name: 'Indie & Alternative', borderColor: Colors.white),
+  ];
 
   @override
   void initState() {
@@ -216,7 +244,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   _buildSliverAppBar(),
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: EdgeInsets.all(16.0),
+                      padding: EdgeInsets.only(
+                        left: 16.0,
+                        right: 16.0,
+                        top: 16.0,
+                        bottom: 140.0,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -230,6 +263,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           SectionTitle("Today's Biggest Hits"),
                           SizedBox(height: 15),
                           _buildBiggestHits(),
+                          SizedBox(height: 32),
+                          _buildGenres(),
                         ],
                       ),
                     ),
@@ -237,7 +272,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-            
             Positioned(
               left: 0,
               right: 0,
@@ -291,16 +325,54 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildRecentlyPlayedCard() {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => PlayerScreen()),
-        );
-      },
-      child: RecentlyPlayedCard(
-        imageUrl: 'assets/playlist1.png',
-        title: 'Mega Hit Mix',
+    return Container(
+      width: 120,
+      margin: EdgeInsets.only(right: 10),
+      decoration: BoxDecoration(
+        color: Color(0xFF282828),
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            offset: Offset(0, 4),
+            blurRadius: 12,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () {},
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.asset(
+                  'assets/playlist1.png',
+                  width: double.infinity,
+                  height: 120,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              Container(
+                padding: EdgeInsets.all(8),
+                child: Text(
+                  'Mega Hit Mix',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -357,6 +429,61 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  Widget _buildGenres() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Moods & genres',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            TextButton(
+              onPressed: () {},
+              child: Text(
+                'More',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 16),
+        SizedBox(
+          height: 152,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (var i = 0; i < genres.length; i += 2)
+                  if (i + 1 < genres.length)
+                    Container(
+                      margin: EdgeInsets.only(right: 8),
+                      child: Column(
+                        children: [
+                          GenreCard(genre: genres[i]),
+                          SizedBox(height: 8),
+                          if (i + 1 < genres.length)
+                            GenreCard(genre: genres[i + 1]),
+                        ],
+                      ),
+                    ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class SectionTitle extends StatelessWidget {
@@ -375,42 +502,6 @@ class SectionTitle extends StatelessWidget {
           fontSize: 20,
           fontWeight: FontWeight.bold,
         ),
-      ),
-    );
-  }
-}
-
-class RecentlyPlayedCard extends StatelessWidget {
-  final String imageUrl;
-  final String title;
-
-  RecentlyPlayedCard({required this.imageUrl, required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 120,
-      margin: EdgeInsets.only(right: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Image.asset(
-              imageUrl,
-              width: double.infinity,
-              fit: BoxFit.cover,
-            ),
-          ),
-          SizedBox(height: 4),
-          Text(
-            title,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -435,54 +526,74 @@ class PlaylistCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Color(0xFF282828),
         borderRadius: BorderRadius.circular(8),
-      ),
-      clipBehavior: Clip.hardEdge,
-      child: Column(
-        children: [
-          Expanded(
-            flex: 3,
-            child: Container(
-              width: double.infinity,
-              child: Image.asset(
-                imageUrl,
-                fit: BoxFit.cover,
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Container(
-              width: double.infinity,
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: Colors.grey[400],
-                      fontSize: 11,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            offset: Offset(0, 4),
+            blurRadius: 15,
+            spreadRadius: 2,
           ),
         ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () {},
+          child: Container(
+            clipBehavior: Clip.hardEdge,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Container(
+                    width: double.infinity,
+                    child: Image.asset(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 1,
+                  child: Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 11,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

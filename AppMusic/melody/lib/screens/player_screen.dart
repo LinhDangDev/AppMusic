@@ -193,7 +193,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             child: Icon(Icons.play_arrow, size: 40),
                           ),
                           Icon(Icons.skip_next, color: Colors.white, size: 40),
-                          Icon(Icons.timer, color: Colors.white),
+                          Icon(Icons.repeat, color: Colors.white),
                         ],
                       ),
                     ),
