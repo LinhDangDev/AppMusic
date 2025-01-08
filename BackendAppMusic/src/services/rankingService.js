@@ -1,36 +1,78 @@
-const cron = require('node-cron');
-const axios = require('axios');
-const db = require('../model/db');
-const musicService = require('./musicService');
+import db from '../model/db.js';
+import cron from 'node-cron';
+import Redis from 'ioredis';
+
+const redis = new Redis({
+  host: process.env.REDIS_HOST || 'redis',
+  port: process.env.REDIS_PORT || 6379
+});
 
 class RankingService {
-  async updateCharts() {
+  constructor() {
+    this.CACHE_KEY = 'music_rankings';
+    this.UPDATE_INTERVAL = '0 */6 * * *'; // Cập nhật mỗi 6 giờ
+  }
+
+  async updateRankings() {
     try {
-      // Ví dụ lấy top chart từ API của YouTube Music
-      const charts = await this.ytMusic.getCharts();
-      
-      for (const song of charts.songs) {
-        // Lưu thông tin bài hát vào database nếu chưa có
-        const music = await musicService.searchAndSaveMusic(song.title, song.artist);
-        
-        // Cập nhật bảng xếp hạng
-        await db.execute(`
-          INSERT INTO Rankings (platform, music_id, rank_position)
-          VALUES ('youtube_music', ?, ?)
-          ON DUPLICATE KEY UPDATE rank_position = ?
-        `, [music.id, song.rank, song.rank]);
-      }
+      const [rows] = await db.execute(`
+        SELECT 
+          m.id,
+          m.title,
+          m.artist_id,
+          a.name as artist_name,
+          COUNT(ph.id) as play_count
+        FROM Music m
+        LEFT JOIN Play_History ph ON m.id = ph.music_id
+        JOIN Artists a ON m.artist_id = a.id
+        WHERE ph.played_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+        GROUP BY m.id
+        ORDER BY play_count DESC
+        LIMIT 100
+      `);
+
+      await redis.set(this.CACHE_KEY, JSON.stringify(rows));
+      console.log('Rankings updated successfully');
     } catch (error) {
-      console.error('Error updating charts:', error);
+      console.error('Error updating rankings:', error);
+    }
+  }
+
+  async getRankings() {
+    try {
+      const cachedRankings = await redis.get(this.CACHE_KEY);
+      if (cachedRankings) {
+        return JSON.parse(cachedRankings);
+      }
+
+      // Nếu không có cache, tính toán lại
+      await this.updateRankings();
+      const newRankings = await redis.get(this.CACHE_KEY);
+      return JSON.parse(newRankings);
+    } catch (error) {
+      console.error('Error getting rankings:', error);
+      throw error;
     }
   }
 
   startScheduledUpdates() {
-    // Cập nhật bảng xếp hạng mỗi 6 tiếng
-    cron.schedule('0 */6 * * *', () => {
-      this.updateCharts();
+    cron.schedule(this.UPDATE_INTERVAL, () => {
+      this.updateRankings();
     });
+    console.log('Ranking update scheduler started');
+  }
+
+  async recordPlay(musicId, userId) {
+    try {
+      await db.execute(
+        'INSERT INTO Play_History (music_id, user_id, played_at) VALUES (?, ?, NOW())',
+        [musicId, userId]
+      );
+    } catch (error) {
+      console.error('Error recording play:', error);
+      throw error;
+    }
   }
 }
 
-module.exports = new RankingService(); 
+export default new RankingService(); 

@@ -1,82 +1,109 @@
+import userService from '../services/userService.js';
+import { createError } from '../utils/error.js';
 
-const express = require('express');
-const router = express.Router();
-const User = require('../models/User');
-
-// Get all users
-router.get('/', async (req, res) => {
-  try {
-    const users = await User.find();
-    res.json(users);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// Get one user
-router.get('/:id', getUser, (req, res) => {
-  res.json(res.user);
-});
-
-// Create a user
-router.post('/', async (req, res) => {
-  const user = new User({
-    name: req.body.name,
-    email: req.body.email,
-    password: req.body.password,
-  });
-
-  try {
-    const newUser = await user.save();
-    res.status(201).json(newUser);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-});
-
-// Update a user
-router.patch('/:id', getUser, async (req, res) => {
-  if (req.body.name != null) {
-    res.user.name = req.body.name;
-  }
-  if (req.body.email != null) {
-    res.user.email = req.body.email;
-  }
-  if (req.body.password != null) {
-    res.user.password = req.body.password;
-  }
-
-  try {
-    const updatedUser = await res.user.save();
-    res.json(updatedUser);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-});
-
-// Delete a user
-router.delete('/:id', getUser, async (req, res) => {
-  try {
-    await res.user.remove();
-    res.json({ message: 'Deleted User' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-async function getUser(req, res, next) {
-  let user;
-  try {
-    user = await User.findById(req.params.id);
-    if (user == null) {
-      return res.status(404).json({ message: 'Cannot find user' });
+class UserController {
+  async getCurrentUser(req, res, next) {
+    try {
+      const user = await userService.getUserById(req.user.uid);
+      res.json({
+        status: 'success',
+        data: user
+      });
+    } catch (error) {
+      next(error);
     }
-  } catch (err) {
-    return res.status(500).json({ message: err.message });
   }
 
-  res.user = user;
-  next();
+  async updateUser(req, res, next) {
+    try {
+      const { name, avatar } = req.body;
+      const updatedUser = await userService.updateUser(req.user.uid, { name, avatar });
+      res.json({
+        status: 'success',
+        data: updatedUser
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async changePassword(req, res, next) {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      if (!currentPassword || !newPassword) {
+        throw createError('Current password and new password are required', 400);
+      }
+      await userService.changePassword(req.user.uid, currentPassword, newPassword);
+      res.json({
+        status: 'success',
+        message: 'Password updated successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getPlayHistory(req, res, next) {
+    try {
+      const history = await userService.getPlayHistory(req.user.uid);
+      res.json({
+        status: 'success',
+        data: history
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getFavorites(req, res, next) {
+    try {
+      const favorites = await userService.getFavorites(req.user.uid);
+      res.json({
+        status: 'success',
+        data: favorites
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async addToFavorites(req, res, next) {
+    try {
+      const { musicId } = req.params;
+      await userService.addToFavorites(req.user.uid, musicId);
+      res.status(201).json({
+        status: 'success',
+        message: 'Added to favorites'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async removeFromFavorites(req, res, next) {
+    try {
+      const { musicId } = req.params;
+      await userService.removeFromFavorites(req.user.uid, musicId);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getUserById(req, res, next) {
+    try {
+      const user = await userService.getUserById(req.params.id);
+      if (!user) {
+        throw createError('User not found', 404);
+      }
+      res.json({
+        status: 'success',
+        data: user
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
-module.exports = router;
+export default new UserController();

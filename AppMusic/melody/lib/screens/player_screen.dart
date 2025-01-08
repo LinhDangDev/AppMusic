@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:audio_service/audio_service.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:melody/services/audio_handler.dart';
 
 class PlayerScreen extends StatefulWidget {
   @override
@@ -6,8 +9,47 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
+  late AudioHandler _audioHandler;
   double _currentSliderValue = 0.0;
   bool _isLyricsVisible = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupAudioHandler();
+  }
+
+  Future<void> _setupAudioHandler() async {
+    _audioHandler = await AudioService.init(
+      builder: () => MyAudioHandler(),
+      config: const AudioServiceConfig(
+        androidNotificationChannelId: 'com.myapp.audio',
+        androidNotificationChannelName: 'Audio Service',
+        androidNotificationOngoing: true,
+      ),
+    );
+  }
+
+  void _handlePlayPause() async {
+    final playbackState = _audioHandler.playbackState.value;
+    if (playbackState.playing) {
+      await _audioHandler.pause();
+    } else {
+      if (_audioHandler.mediaItem.value == null) {
+        await _audioHandler.addQueueItem(
+          MediaItem(
+            id: '1',
+            album: 'Album Name',
+            title: 'Song Title',
+            artist: 'Artist Name',
+            duration: const Duration(minutes: 4, seconds: 9),
+            artUri: Uri.parse('https://example.com/albumart.jpg'),
+          ),
+        );
+      }
+      await _audioHandler.play();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -190,7 +232,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               shape: BoxShape.circle,
                               color: Colors.white,
                             ),
-                            child: Icon(Icons.play_arrow, size: 40),
+                            child: IconButton(
+                              icon: StreamBuilder<PlaybackState>(
+                                stream: _audioHandler.playbackState,
+                                builder: (context, snapshot) {
+                                  final playing =
+                                      snapshot.data?.playing ?? false;
+                                  return Icon(
+                                    playing ? Icons.pause : Icons.play_arrow,
+                                    size: 40,
+                                    color: Colors.black,
+                                  );
+                                },
+                              ),
+                              onPressed: _handlePlayPause,
+                            ),
                           ),
                           Icon(Icons.skip_next, color: Colors.white, size: 40),
                           Icon(Icons.repeat, color: Colors.white),
@@ -353,6 +409,79 @@ class _PlayerScreenState extends State<PlayerScreen> {
       onTap: () {
         Navigator.pop(context);
       },
+    );
+  }
+
+  @override
+  void dispose() {
+    // Clean up if needed
+    super.dispose();
+  }
+}
+
+class MyAudioHandler extends BaseAudioHandler {
+  final _player = AudioPlayer();
+
+  MyAudioHandler() {
+    _player.playbackEventStream.listen(_broadcastState);
+    _player.playerStateStream.listen((playerState) {
+      _broadcastState(_player.playbackEvent);
+    });
+  }
+
+  @override
+  Future<void> play() => _player.play();
+
+  @override
+  Future<void> pause() => _player.pause();
+
+  @override
+  Future<void> stop() => _player.stop();
+
+  @override
+  Future<void> addQueueItem(MediaItem mediaItem) async {
+    try {
+      // Thay thế URL này bằng URL thực từ backend của bạn
+      await _player.setAudioSource(
+        AudioSource.uri(
+          Uri.parse('YOUR_AUDIO_URL_HERE'),
+          tag: mediaItem,
+        ),
+      );
+      this.mediaItem.add(mediaItem);
+    } catch (e) {
+      print('Error loading audio source: $e');
+    }
+  }
+
+  void _broadcastState(PlaybackEvent event) {
+    final playing = _player.playing;
+    playbackState.add(
+      PlaybackState(
+        controls: [
+          MediaControl.skipToPrevious,
+          if (playing) MediaControl.pause else MediaControl.play,
+          MediaControl.skipToNext,
+        ],
+        systemActions: const {
+          MediaAction.seek,
+          MediaAction.seekForward,
+          MediaAction.seekBackward,
+        },
+        androidCompactActionIndices: const [0, 1, 2],
+        processingState: const {
+          ProcessingState.idle: AudioProcessingState.idle,
+          ProcessingState.loading: AudioProcessingState.loading,
+          ProcessingState.buffering: AudioProcessingState.buffering,
+          ProcessingState.ready: AudioProcessingState.ready,
+          ProcessingState.completed: AudioProcessingState.completed,
+        }[_player.processingState]!,
+        playing: playing,
+        updatePosition: _player.position,
+        bufferedPosition: _player.bufferedPosition,
+        speed: _player.speed,
+        queueIndex: 0,
+      ),
     );
   }
 }

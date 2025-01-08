@@ -1,33 +1,27 @@
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
+import { initializeApp, cert } from 'firebase-admin/app';
 
-// Your web app's Firebase configuration
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_AUTH_DOMAIN",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID",
-    measurementId: "YOUR_MEASUREMENT_ID"
+  type: process.env.FIREBASE_TYPE || "service_account",
+  project_id: process.env.FIREBASE_PROJECT_ID || "app-music-xxx",
+  private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
+  private_key: process.env.FIREBASE_PRIVATE_KEY ? 
+    process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined,
+  client_email: process.env.FIREBASE_CLIENT_EMAIL,
+  client_id: process.env.FIREBASE_CLIENT_ID,
+  auth_uri: "https://accounts.google.com/o/oauth2/auth",
+  token_uri: "https://oauth2.googleapis.com/token",
+  auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+  client_x509_cert_url: process.env.FIREBASE_CERT_URL
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+// Kiểm tra xem đã khởi tạo Firebase chưa
+try {
+  initializeApp({
+    credential: cert(firebaseConfig)
+  });
+  console.log('Firebase initialized successfully');
+} catch (error) {
+  console.warn('Firebase initialization warning:', error.message);
+}
 
-const admin = require('firebase-admin');
-require('dotenv').config();
-
-const serviceAccount = {
-    projectId: process.env.FIREBASE_PROJECT_ID,
-    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-};
-
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-});
-
-module.exports = admin;
+export default firebaseConfig;

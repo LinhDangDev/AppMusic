@@ -1,13 +1,32 @@
+import express from 'express';
+import auth from '../middleware/auth.js';
+import { apiLimiter } from '../middleware/rateLimiter.js';
+import userController from '../controllers/userController.js';
 
-const express = require('express');
 const router = express.Router();
-const userController = require('../controllers/userController');
 
-// Define user routes
-router.get('/', userController.getAllUsers);
-router.get('/:id', userController.getUserById);
-router.post('/', userController.createUser);
-router.put('/:id', userController.updateUser);
-router.delete('/:id', userController.deleteUser);
+// Lấy thông tin user hiện tại
+router.get('/me', auth, apiLimiter, userController.getCurrentUser);
 
-module.exports = router;
+// Cập nhật thông tin user
+router.put('/me', auth, apiLimiter, userController.updateUser);
+
+// Thay đổi mật khẩu
+router.put('/me/password', auth, apiLimiter, userController.changePassword);
+
+// Lấy lịch sử nghe nhạc
+router.get('/me/history', auth, apiLimiter, userController.getPlayHistory);
+
+// Lấy bài hát yêu thích
+router.get('/me/favorites', auth, apiLimiter, userController.getFavorites);
+
+// Thêm bài hát vào yêu thích
+router.post('/me/favorites/:musicId', auth, apiLimiter, userController.addToFavorites);
+
+// Xóa bài hát khỏi yêu thích
+router.delete('/me/favorites/:musicId', auth, apiLimiter, userController.removeFromFavorites);
+
+// Lấy thông tin user khác (nếu cần)
+router.get('/:id', auth, apiLimiter, userController.getUserById);
+
+export default router;

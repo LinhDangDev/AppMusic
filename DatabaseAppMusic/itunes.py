@@ -59,26 +59,32 @@ def download_song(artist, title):
         if not os.path.exists('downloads'):
             os.makedirs('downloads')
 
-        # Tạo search query
+        # Create search query
         search_query = f"{artist} {title} official audio"
 
-        # Sử dụng youtube_dl để tải nhạc
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': os.path.join('downloads', '%(title)s.%(ext)s'),
-            'quiet': True,
-        }
+        # Search for video
+        s = Search(search_query)
+        results = s.results
 
-        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(search_query, download=False)
-            if info:
-                # Lấy URL của video đầu tiên
-                video_url = info['entries'][0]['webpage_url']
-                ydl.download([video_url])
-                # Tìm file nhạc vừa tải về
-                for file in os.listdir('downloads'):
-                    if file.endswith('.mp3'):
-                        return os.path.join('downloads', file)
+        if not results:
+            return None
+
+        # Get first result
+        yt = results[0]
+
+        # Clean filename
+        filename = re.sub(r'[<>:"/\\|?*]', '', f"{artist} - {title}")
+        output_path = os.path.join('downloads', f"{filename}.mp3")
+
+        # Get audio stream and download
+        audio_stream = yt.streams.filter(only_audio=True).first()
+        if audio_stream:
+            audio_stream.download(
+                output_path='downloads',
+                filename=f"{filename}.mp3"
+            )
+            return output_path
+
         return None
 
     except Exception as e:

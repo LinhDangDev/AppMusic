@@ -1,84 +1,111 @@
-const db = require('../model/db');
+import db from '../model/db.js';
+import ytdl from 'ytdl-core';
+import { createError } from '../utils/error.js';
 
 class MusicService {
-  async searchSong(query) {
+  async searchMusic(query) {
     try {
-      const [songs] = await db.execute(`
-        SELECT s.*, a.name as artist_name 
-        FROM Songs s
-        JOIN Artists a ON s.artist_id = a.id
-        WHERE s.title LIKE ? OR a.name LIKE ?
+      const [rows] = await db.execute(`
+        SELECT 
+          m.id,
+          m.title,
+          m.image_url,
+          m.preview_url,
+          a.name as artist_name,
+          a.id as artist_id
+        FROM Music m
+        JOIN Artists a ON m.artist_id = a.id
+        WHERE m.title LIKE ? OR a.name LIKE ?
+        LIMIT 20
       `, [`%${query}%`, `%${query}%`]);
-
-      return songs.map(song => ({
-        id: song.id,
-        title: song.title,
-        artist: song.artist_name,
-        duration: song.duration,
-        thumbnail: song.image_url,
-        audioUrl: song.audio_url
-      }));
+      
+      return rows;
     } catch (error) {
-      console.error('Error searching songs:', error);
+      console.error('Error searching music:', error);
       throw error;
     }
   }
 
-  async getStreamingData(songId) {
+  async getMusicById(id) {
     try {
-      const [songs] = await db.execute(`
-        SELECT s.*, a.name as artist_name 
-        FROM Songs s
-        JOIN Artists a ON s.artist_id = a.id
-        WHERE s.id = ?
-      `, [songId]);
+      const [rows] = await db.execute(`
+        SELECT 
+          m.*,
+          a.name as artist_name,
+          a.id as artist_id
+        FROM Music m
+        JOIN Artists a ON m.artist_id = a.id
+        WHERE m.id = ?
+      `, [id]);
 
-      if (songs.length === 0) {
-        throw new Error('Song not found');
+      if (!rows.length) {
+        throw createError('Music not found', 404);
       }
 
-      const song = songs[0];
-      return {
-        url: song.audio_url,
-        title: song.title,
-        artist: song.artist_name,
-        thumbnail: song.image_url,
-        duration: song.duration
-      };
+      return rows[0];
     } catch (error) {
-      console.error('Error getting stream data:', error);
+      console.error('Error getting music by id:', error);
       throw error;
     }
   }
 
-  // Thêm các phương thức quản lý bài hát và nghệ sĩ
-  async addSong(songData) {
+  async getStreamUrl(videoId) {
     try {
-      const [result] = await db.execute(`
-        INSERT INTO Songs (title, artist_id, duration, audio_url, image_url)
-        VALUES (?, ?, ?, ?, ?)
-      `, [songData.title, songData.artistId, songData.duration, songData.audioUrl, songData.imageUrl]);
-      
-      return result.insertId;
+      const info = await ytdl.getInfo(videoId);
+      const format = ytdl.chooseFormat(info.formats, { quality: 'highestaudio' });
+      return format.url;
     } catch (error) {
-      console.error('Error adding song:', error);
+      console.error('Error getting stream URL:', error);
+      throw createError('Failed to get stream URL', 500);
+    }
+  }
+
+  async recordPlay(musicId, userId) {
+    try {
+      await db.execute(
+        'INSERT INTO Play_History (music_id, user_id, played_at) VALUES (?, ?, NOW())',
+        [musicId, userId]
+      );
+    } catch (error) {
+      console.error('Error recording play:', error);
+      // Không throw error vì đây không phải lỗi nghiêm trọng
+    }
+  }
+
+  async getTopSongs(limit = 10) {
+    try {
+      const [rows] = await db.execute(`
+        SELECT 
+          m.id,
+          m.title,
+          m.image_url,
+          a.name as artist_name,
+          COUNT(ph.id) as play_count
+        FROM Music m
+        LEFT JOIN Play_History ph ON m.id = ph.music_id
+        JOIN Artists a ON m.artist_id = a.id
+        GROUP BY m.id
+        ORDER BY play_count DESC
+        LIMIT ?
+      `, [limit]);
+      
+      return rows;
+    } catch (error) {
+      console.error('Error getting top songs:', error);
       throw error;
     }
   }
 
-  async addArtist(artistData) {
-    try {
-      const [result] = await db.execute(`
-        INSERT INTO Artists (name, bio, image_url)
-        VALUES (?, ?, ?)
-      `, [artistData.name, artistData.bio, artistData.imageUrl]);
-      
-      return result.insertId;
-    } catch (error) {
-      console.error('Error adding artist:', error);
-      throw error;
+  async generateStreamUrl(music) {
+    // Xử lý theo source type
+    switch(music.sourceType) {
+      case 'youtube':
+        return await this.getYoutubeStream(music.sourceUrl);
+      case 'local':
+        return await this.getLocalFileStream(music.filePath);
+      // Thêm các source khác
     }
   }
 }
 
-module.exports = new MusicService(); 
+export default new MusicService(); 

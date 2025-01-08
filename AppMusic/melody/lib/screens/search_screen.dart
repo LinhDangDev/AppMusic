@@ -95,8 +95,8 @@ class SearchScreen extends StatelessWidget {
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 2,
                         childAspectRatio: 2.5,
-                        crossAxisSpacing: 8,
-                        mainAxisSpacing: 8,
+                        crossAxisSpacing: 15,
+                        mainAxisSpacing: 15,
                       ),
                       itemCount: categories.length,
                       itemBuilder: (context, index) {
