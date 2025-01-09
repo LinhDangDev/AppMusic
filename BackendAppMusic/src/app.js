@@ -8,6 +8,8 @@ import playlistRoutes from './routes/playlistRoutes.js';
 import errorHandler from './middleware/errorHandler.js';
 import rankingService from './services/rankingService.js';
 import syncService from './services/syncService.js';
+import { connectWithRetry } from './model/db.js';
+import { startYouTubeSync } from './scripts/updateMusicSources.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -66,6 +68,9 @@ const startServices = async () => {
       syncService.syncITunesCharts();
     }, 24 * 60 * 60 * 1000); // Cập nhật mỗi 24 giờ
     
+    // Thêm YouTube sync service
+    await startYouTubeSync();
+    
     console.log('Services initialized successfully');
   } catch (error) {
     console.error('Failed to initialize services:', error);
@@ -73,10 +78,22 @@ const startServices = async () => {
 };
 
 // Start server
-app.listen(PORT, '0.0.0.0', async () => {
-  console.log(`Server is running on port ${PORT}`);
-  await startServices();
-});
+const startServer = async () => {
+  try {
+    // Đợi database kết nối
+    await connectWithRetry();
+    
+    app.listen(PORT, '0.0.0.0', async () => {
+      console.log(`Server is running on port ${PORT}`);
+      await startServices();
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {

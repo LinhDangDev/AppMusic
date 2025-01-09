@@ -5,7 +5,8 @@ import { createError } from '../utils/error.js';
 class MusicService {
   async searchMusic(query) {
     try {
-      const [rows] = await db.execute(`
+      // Tìm trong database trước
+      const [dbResults] = await db.execute(`
         SELECT 
           m.id,
           m.title,
@@ -16,13 +17,37 @@ class MusicService {
         FROM Music m
         JOIN Artists a ON m.artist_id = a.id
         WHERE m.title LIKE ? OR a.name LIKE ?
-        LIMIT 20
+        LIMIT 10
       `, [`%${query}%`, `%${query}%`]);
       
-      return rows;
+      // Tìm trên YouTube
+      const ytResults = await this.searchYouTube(query);
+      
+      // Kết hợp kết quả
+      return {
+        database: dbResults,
+        youtube: ytResults
+      };
     } catch (error) {
       console.error('Error searching music:', error);
       throw error;
+    }
+  }
+
+  async searchYouTube(query) {
+    try {
+      const searchResults = await ytdl.search(query, { limit: 5 });
+      return searchResults.map(video => ({
+        id: video.id,
+        title: video.title,
+        thumbnail: `https://img.youtube.com/vi/${video.id}/maxresdefault.jpg`,
+        duration: video.duration,
+        author: video.author.name,
+        url: `https://www.youtube.com/watch?v=${video.id}`
+      }));
+    } catch (error) {
+      console.error('YouTube search error:', error);
+      return [];
     }
   }
 

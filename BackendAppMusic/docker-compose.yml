@@ -21,6 +21,7 @@ services:
       - NODE_ENV=development
       - PORT=3000
       - HOST=0.0.0.0
+      - YOUTUBE_API_KEY=AIzaSyDfKJHDC6zEWBZ3TrPo0pV9J_hBZor1xqA
     depends_on:
       mysql:
         condition: service_healthy

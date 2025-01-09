@@ -1,33 +1,38 @@
-import { auth } from '../config/firebase.js';
+import admin from '../config/firebase.js';
+import { createError } from '../utils/error.js';
 
 const authMiddleware = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      throw createError('No token provided', 401);
     }
 
     const token = authHeader.split(' ')[1];
     
     try {
-      // Verify ID token
-      const decodedToken = await auth.verifySessionCookie(token);
-      req.user = decodedToken;
+      // Thử verify ID token
+      const decodedToken = await admin.auth().verifyIdToken(token);
+      req.user = {
+        uid: decodedToken.uid,
+        email: decodedToken.email
+      };
       next();
-    } catch (error) {
-      // Nếu session cookie không hợp lệ, thử verify ID token
+    } catch (idTokenError) {
+      // Nếu verify ID token thất bại, thử verify custom token
       try {
-        const decodedToken = await auth.verifyIdToken(token);
-        req.user = decodedToken;
+        const customTokenResult = await admin.auth().verifyCustomToken(token);
+        req.user = {
+          uid: customTokenResult.uid,
+          email: customTokenResult.email
+        };
         next();
-      } catch (idTokenError) {
-        console.error('Token verification failed:', idTokenError);
-        return res.status(401).json({ message: 'Invalid token' });
+      } catch (customTokenError) {
+        throw createError('Invalid token', 401);
       }
     }
   } catch (error) {
-    console.error('Auth error:', error);
-    res.status(401).json({ message: 'Unauthorized' });
+    next(error);
   }
 };
 
