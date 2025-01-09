@@ -97,13 +97,63 @@ class MusicService {
   }
 
   async generateStreamUrl(music) {
-    // Xử lý theo source type
-    switch(music.sourceType) {
-      case 'youtube':
-        return await this.getYoutubeStream(music.sourceUrl);
-      case 'local':
-        return await this.getLocalFileStream(music.filePath);
-      // Thêm các source khác
+    try {
+      switch(music.source) {
+        case 'youtube':
+          return await this.getYoutubeStream(music.source_id);
+        case 'itunes':
+          // Fallback to preview_url if full version not available
+          return music.preview_url;
+        default:
+          throw createError('Unsupported music source', 400);
+      }
+    } catch (error) {
+      console.error('Error generating stream URL:', error);
+      throw error;
+    }
+  }
+
+  async getYoutubeStream(videoId) {
+    try {
+      const info = await ytdl.getInfo(videoId);
+      const audioFormat = ytdl.chooseFormat(info.formats, { 
+        quality: 'highestaudio',
+        filter: 'audioonly' 
+      });
+      
+      if (!audioFormat) {
+        throw createError('No audio format found', 404);
+      }
+
+      return audioFormat.url;
+    } catch (error) {
+      console.error('Error getting YouTube stream:', error);
+      throw createError('Failed to get stream URL', 500);
+    }
+  }
+
+  async searchAndAddYoutubeSource(musicId, title, artist) {
+    try {
+      const searchQuery = `${title} ${artist} official audio`;
+      const searchResults = await ytdl.search(searchQuery, { limit: 1 });
+      
+      if (searchResults.length > 0) {
+        const videoId = searchResults[0].id;
+        const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+        const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+
+        // Sử dụng stored procedure đã tạo
+        await db.execute(
+          'CALL update_youtube_source(?, ?, ?, ?)',
+          [musicId, videoId, videoUrl, thumbnailUrl]
+        );
+        
+        return videoId;
+      }
+      throw createError('No YouTube source found', 404);
+    } catch (error) {
+      console.error('Error adding YouTube source:', error);
+      throw error;
     }
   }
 }

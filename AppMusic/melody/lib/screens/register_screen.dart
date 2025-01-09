@@ -203,7 +203,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     // Login link
                     TextButton(
                       onPressed: () {
-                        Navigator.pop(context);
+                        Navigator.pushReplacementNamed(context, '/login');
                       },
                       child: Text(
                         'Already have an account? Login',
@@ -226,22 +226,40 @@ class _RegisterScreenState extends State<RegisterScreen> {
       
       try {
         final authService = AuthService();
-        await authService.register(
+        final response = await authService.register(
           _nameController.text.trim(),
           _emailController.text.trim(),
           _passwordController.text,
         );
         
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => HomeScreen()),
-        );
+        if (response.success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Đăng ký thành công!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+
+          await Future.delayed(Duration(seconds: 2));
+          
+          if (mounted) {
+            Navigator.pushReplacementNamed(context, '/login');
+          }
+        } else {
+          throw Exception(response.message ?? 'Đăng ký thất bại');
+        }
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
+          SnackBar(
+            content: Text(e.toString().replaceAll('Exception:', '')),
+            backgroundColor: Colors.red,
+          ),
         );
       } finally {
-        setState(() => _isLoading = false);
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
       }
     }
   }

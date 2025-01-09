@@ -4,5 +4,4 @@ Dockerfile
 .dockerignore
 .git
 .gitignore
-README.md
-.env 
+README.md 

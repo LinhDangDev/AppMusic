@@ -13,7 +13,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin: '*', // Cho phép tất cả các origin trong môi trường development
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 app.use(morgan('dev'));
 
@@ -25,6 +29,30 @@ app.use('/api/playlists', playlistRoutes);
 
 // Error handling
 app.use(errorHandler);
+
+// Thêm middleware xử lý lỗi CORS
+app.use((err, req, res, next) => {
+  if (err.name === 'UnauthorizedError') {
+    res.status(401).json({
+      status: 'error',
+      message: 'Invalid token or no token provided'
+    });
+  } else {
+    next(err);
+  }
+});
+
+// Thêm xử lý lỗi network
+app.use((err, req, res, next) => {
+  if (err.code === 'ECONNREFUSED') {
+    res.status(503).json({
+      status: 'error',
+      message: 'Service temporarily unavailable'
+    });
+  } else {
+    next(err);
+  }
+});
 
 // Start scheduled tasks
 const startServices = async () => {
@@ -45,7 +73,7 @@ const startServices = async () => {
 };
 
 // Start server
-app.listen(PORT, async () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`Server is running on port ${PORT}`);
   await startServices();
 });

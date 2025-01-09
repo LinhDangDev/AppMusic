@@ -1,41 +1,64 @@
 import 'package:flutter/material.dart';
 import 'package:melody/constants/app_colors.dart';
 import 'package:melody/widgets/bottom_player_nav.dart';
+import 'package:melody/services/auth_service.dart';
+import 'package:melody/services/music_service.dart';
+import 'dart:async';
 
-class SearchScreen extends StatelessWidget {
-  final List<SearchCategory> categories = [
-    SearchCategory(
-      title: "Podcasts",
-      icon: "assets/playlist1.png",
-      color: Colors.purple,
-    ),
-    SearchCategory(
-      title: "Live Events",
-      icon: "assets/playlist1.png",
-      color: Colors.blue,
-    ),
-    SearchCategory(
-      title: "Made for you",
-      icon: "assets/playlist1.png",
-      color: Colors.orange,
-    ),
-    SearchCategory(
-      title: "New Releases",
-      icon: "assets/playlist1.png",
-      color: Colors.pink,
-    ),
-    SearchCategory(
-      title: "Hindi",
-      icon: "assets/playlist1.png",
-      color: Colors.brown,
-    ),
-    SearchCategory(
-      title: "Punjabi",
-      icon: "assets/playlist1.png",
-      color: Colors.red,
-    ),
-    // Thêm các category khác tương tự
-  ];
+class SearchScreen extends StatefulWidget {
+  @override
+  _SearchScreenState createState() => _SearchScreenState();
+}
+
+class _SearchScreenState extends State<SearchScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  final MusicService _musicService = MusicService();
+  bool _isLoading = false;
+  List<dynamic> _searchResults = [];
+  String _error = '';
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  _onSearchChanged() {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      _handleSearch(_searchController.text);
+    });
+  }
+
+  // Hàm tìm kiếm
+  Future<void> _handleSearch(String query) async {
+    if (query.isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _error = '';
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _error = '';
+    });
+
+    try {
+      final results = await _musicService.searchMusic(query);
+      setState(() {
+        _searchResults = results;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'Có lỗi xảy ra khi tìm kiếm';
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,133 +67,105 @@ class SearchScreen extends StatelessWidget {
         decoration: BoxDecoration(
           gradient: AppColors.backgroundGradient,
         ),
-        child: Stack(
-          children: [
-            SafeArea(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text(
-                      "Search",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Search Bar
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: TextField(
+                  controller: _searchController,
+                  style: TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'Tìm kiếm bài hát, nghệ sĩ...',
+                    hintStyle: TextStyle(color: Colors.grey),
+                    prefixIcon: Icon(Icons.search, color: Colors.grey),
+                    filled: true,
+                    fillColor: Colors.white.withOpacity(0.1),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(30),
+                      borderSide: BorderSide.none,
                     ),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   ),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: TextField(
-                        decoration: InputDecoration(
-                          border: InputBorder.none,
-                          hintText: "What do you want to listen to?",
-                          icon: Icon(Icons.search),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text(
-                      "Browse all",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: GridView.builder(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        childAspectRatio: 2.5,
-                        crossAxisSpacing: 15,
-                        mainAxisSpacing: 15,
-                      ),
-                      itemCount: categories.length,
-                      itemBuilder: (context, index) {
-                        return CategoryCard(category: categories[index]);
-                      },
-                    ),
-                  ),
-                ],
+                  onChanged: (value) => _handleSearch(value),
+                ),
               ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: BottomPlayerNav(currentIndex: 1),
-            ),
-          ],
+
+              // Loading indicator
+              if (_isLoading)
+                Center(child: CircularProgressIndicator()),
+
+              // Error message
+              if (_error.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Text(
+                    _error,
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ),
+
+              // Search results
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _searchResults.length,
+                  itemBuilder: (context, index) {
+                    final item = _searchResults[index];
+                    return ListTile(
+                      leading: item['image_url'] != null
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: Image.network(
+                                item['image_url'],
+                                width: 50,
+                                height: 50,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    Container(
+                                      width: 50,
+                                      height: 50,
+                                      color: Colors.grey,
+                                      child: Icon(Icons.music_note),
+                                    ),
+                              ),
+                            )
+                          : Container(
+                              width: 50,
+                              height: 50,
+                              color: Colors.grey,
+                              child: Icon(Icons.music_note),
+                            ),
+                      title: Text(
+                        item['title'] ?? 'Unknown',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      subtitle: Text(
+                        item['artist_name'] ?? 'Unknown Artist',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                      onTap: () {
+                        // TODO: Xử lý khi người dùng chọn bài hát
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
+      ),
+      bottomNavigationBar: BottomPlayerNav(
+        currentIndex: 1,
       ),
     );
   }
-}
-
-class SearchCategory {
-  final String title;
-  final String icon;
-  final Color color;
-
-  SearchCategory({
-    required this.title,
-    required this.icon,
-    required this.color,
-  });
-}
-
-class CategoryCard extends StatelessWidget {
-  final SearchCategory category;
-
-  const CategoryCard({required this.category});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: category.color,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            right: -10,
-            bottom: -10,
-            child: Transform.rotate(
-              angle: 25 * 3.14 / 180,
-              child: Image.asset(
-                category.icon,
-                width: 50,
-                height: 50,
-              ),
-            ),
-          ),
-          Padding(
-            padding: EdgeInsets.all(8),
-            child: Text(
-              category.title,
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+  void dispose() {
+    _debounce?.cancel();
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    super.dispose();
   }
 }

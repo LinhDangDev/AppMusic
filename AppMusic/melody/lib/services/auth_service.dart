@@ -1,86 +1,132 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class AuthService {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final Dio _dio = Dio(BaseOptions(
-    baseURL: 'YOUR_BACKEND_URL', // Replace with your backend URL
-    validateStatus: (status) => true,
-  ));
+  // Thay thế IP này bằng IP của máy tính trong mạng LAN
+  // Để tìm IP trên Windows: chạy 'ipconfig' trong CMD
+  // Để tìm IP trên Mac/Linux: chạy 'ifconfig' trong Terminal
+  final String baseUrl = 'http://192.168.102.4:3000/api';  // Thay xxx bằng IP thật
+  final Dio _dio = Dio();
 
-  // Login method
-  Future<UserCredential> login(String email, String password) async {
+  // Thêm phương thức để lưu token
+  Future<void> _saveToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('auth_token', token);
+  }
+
+  Future<AuthResponse> register(String name, String email, String password) async {
     try {
-      final userCredential = await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
+      final response = await _dio.post(
+        '$baseUrl/auth/register',
+        data: {
+          'name': name,
+          'email': email,
+          'password': password,
+        },
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+        ),
       );
-      
-      // Get the ID token
-      final idToken = await userCredential.user?.getIdToken();
-      
-      // Send token to backend
-      final response = await _dio.post('/api/auth/login', data: {
-        'token': idToken,
-      });
-      
-      if (response.statusCode != 200) {
-        throw Exception(response.data['message'] ?? 'Login failed');
+
+      if (response.statusCode == 201) {
+        // Lưu token nếu có
+        if (response.data['data']?['token'] != null) {
+          await _saveToken(response.data['data']['token']);
+        }
+        
+        return AuthResponse(
+          success: true,
+          message: 'Registration successful',
+          data: response.data['data']
+        );
+      } else {
+        return AuthResponse(
+          success: false,
+          message: response.data['message'] ?? 'Registration failed',
+        );
       }
-      
-      return userCredential;
-    } catch (e) {
-      throw _handleAuthError(e);
+    } on DioException catch (e) {
+      print('Registration error: ${e.response?.data ?? e.message}');
+      return AuthResponse(
+        success: false,
+        message: e.response?.data?['message'] ?? 'Network error occurred',
+      );
     }
   }
 
-  // Register method
-  Future<UserCredential> register(String name, String email, String password) async {
+  Future<AuthResponse> login(String email, String password) async {
     try {
-      final userCredential = await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
+      final response = await _dio.post(
+        '$baseUrl/auth/login',
+        data: {
+          'email': email,
+          'password': password,
+        },
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+        ),
       );
-      
-      // Update display name
-      await userCredential.user?.updateDisplayName(name);
-      
-      // Get the ID token
-      final idToken = await userCredential.user?.getIdToken();
-      
-      // Send token to backend
-      final response = await _dio.post('/api/auth/register', data: {
-        'token': idToken,
-        'name': name,
-      });
-      
-      if (response.statusCode != 201) {
-        throw Exception(response.data['message'] ?? 'Registration failed');
+
+      if (response.statusCode == 200) {
+        // Lưu token
+        if (response.data['data']?['token'] != null) {
+          await _saveToken(response.data['data']['token']);
+        }
+        
+        return AuthResponse(
+          success: true,
+          message: 'Login successful',
+          data: response.data['data']
+        );
+      } else {
+        return AuthResponse(
+          success: false,
+          message: response.data['message'] ?? 'Login failed',
+        );
       }
-      
-      return userCredential;
-    } catch (e) {
-      throw _handleAuthError(e);
+    } on DioException catch (e) {
+      print('Login error: ${e.response?.data ?? e.message}');
+      return AuthResponse(
+        success: false,
+        message: e.response?.data?['message'] ?? 'Network error occurred',
+      );
     }
   }
 
-  String _handleAuthError(dynamic error) {
-    if (error is FirebaseAuthException) {
-      switch (error.code) {
-        case 'user-not-found':
-          return 'No user found with this email';
-        case 'wrong-password':
-          return 'Wrong password';
-        case 'email-already-in-use':
-          return 'Email is already registered';
-        case 'invalid-email':
-          return 'Invalid email address';
-        case 'weak-password':
-          return 'Password is too weak';
-        default:
-          return error.message ?? 'Authentication failed';
-      }
-    }
-    return error.toString();
+  Future<void> logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('auth_token');
   }
-} 
+
+  // Thêm phương thức kiểm tra đăng nhập
+  Future<bool> isLoggedIn() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('auth_token') != null;
+  }
+
+  // Thêm phương thức getToken
+  Future<String?> getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('auth_token');
+  }
+}
+
+class AuthResponse {
+  final bool success;
+  final String? message;
+  final Map<String, dynamic>? data;
+
+  AuthResponse({
+    required this.success,
+    this.message,
+    this.data,
+  });
+}

@@ -26,13 +26,15 @@ CREATE TABLE Music (
     album VARCHAR(255),
     duration INT,
     release_date DATE,
-    youtube_thumbnail VARCHAR(255),
+    youtube_url VARCHAR(255),
     youtube_id VARCHAR(50),
+    youtube_thumbnail VARCHAR(255),
     image_url TEXT,
     preview_url TEXT,
-    source VARCHAR(50),
+    source ENUM('youtube', 'itunes', 'local') DEFAULT 'itunes',
     source_id VARCHAR(255),
     play_count INT DEFAULT 0,
+    lyrics TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (artist_id) REFERENCES Artists(id)
@@ -225,6 +227,40 @@ CREATE TABLE Search_History (
     FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE
 );
 
+-- Thêm bảng mới để lưu cache của stream URLs
+CREATE TABLE Stream_Cache (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    music_id INT NOT NULL,
+    stream_url TEXT NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (music_id) REFERENCES Music(id) ON DELETE CASCADE,
+    INDEX idx_expires (expires_at)
+);
+
+-- Thêm bảng để theo dõi lỗi streaming
+CREATE TABLE Streaming_Errors (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    music_id INT NOT NULL,
+    error_type VARCHAR(50) NOT NULL,
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (music_id) REFERENCES Music(id) ON DELETE CASCADE
+);
+
+-- Thêm bảng để lưu thông tin về chất lượng audio
+CREATE TABLE Audio_Quality (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    music_id INT NOT NULL,
+    quality VARCHAR(20) NOT NULL,  -- LOW, MEDIUM, HIGH
+    format VARCHAR(20) NOT NULL,   -- mp3, aac, etc.
+    bitrate INT,                   -- kbps
+    file_size BIGINT,             -- bytes
+    duration INT,                  -- seconds
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (music_id) REFERENCES Music(id) ON DELETE CASCADE
+);
+
 -- Indexes
 CREATE INDEX idx_music_artist ON Music(artist_id);
 CREATE INDEX idx_rankings_date ON Rankings(ranking_date);
@@ -238,6 +274,10 @@ CREATE INDEX idx_promo_codes ON Promo_Codes(code, is_active);
 CREATE INDEX idx_firebase_uid ON Users(firebase_uid);
 CREATE FULLTEXT INDEX idx_music_search ON Music(title);
 CREATE FULLTEXT INDEX idx_artist_search ON Artists(name);
+CREATE INDEX idx_music_source ON Music(source, source_id);
+CREATE INDEX idx_stream_cache_music ON Stream_Cache(music_id);
+CREATE INDEX idx_streaming_errors_music ON Streaming_Errors(music_id);
+CREATE INDEX idx_audio_quality_music ON Audio_Quality(music_id);
 
 -- Trigger
 DELIMITER //
@@ -254,6 +294,52 @@ BEGIN
             JSON_OBJECT('play_count', NEW.play_count)
         );
     END IF;
+END //
+DELIMITER ;
+
+-- Thêm trigger để xóa cache khi cập nhật music
+DELIMITER //
+CREATE TRIGGER clear_stream_cache
+AFTER UPDATE ON Music
+FOR EACH ROW
+BEGIN
+    IF NEW.source != OLD.source OR NEW.source_id != OLD.source_id THEN
+        DELETE FROM Stream_Cache WHERE music_id = NEW.id;
+    END IF;
+END //
+DELIMITER ;
+
+-- Thêm procedure để cập nhật nguồn YouTube
+DELIMITER //
+CREATE PROCEDURE update_youtube_source(
+    IN p_music_id INT,
+    IN p_youtube_id VARCHAR(50),
+    IN p_youtube_url VARCHAR(255),
+    IN p_youtube_thumbnail VARCHAR(255)
+)
+BEGIN
+    UPDATE Music 
+    SET 
+        source = 'youtube',
+        source_id = p_youtube_id,
+        youtube_id = p_youtube_id,
+        youtube_url = p_youtube_url,
+        youtube_thumbnail = p_youtube_thumbnail,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = p_music_id;
+END //
+DELIMITER ;
+
+-- Thêm procedure để ghi nhận lỗi streaming
+DELIMITER //
+CREATE PROCEDURE log_streaming_error(
+    IN p_music_id INT,
+    IN p_error_type VARCHAR(50),
+    IN p_error_message TEXT
+)
+BEGIN
+    INSERT INTO Streaming_Errors (music_id, error_type, error_message)
+    VALUES (p_music_id, p_error_type, p_error_message);
 END //
 DELIMITER ;
 

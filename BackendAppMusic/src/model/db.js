@@ -9,17 +9,32 @@ const pool = mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0,
   enableKeepAlive: true,
-  keepAliveInitialDelay: 0
+  keepAliveInitialDelay: 0,
+  acquireTimeout: 60000
 });
 
-// Kiểm tra kết nối
-pool.getConnection()
-  .then(connection => {
+// Thêm retry logic
+const maxRetries = 5;
+let retries = 0;
+
+const connectWithRetry = async () => {
+  try {
+    const connection = await pool.getConnection();
     console.log('Database connected successfully');
     connection.release();
-  })
-  .catch(err => {
-    console.error('Error connecting to the database:', err);
-  });
+  } catch (err) {
+    if (retries < maxRetries) {
+      retries++;
+      console.log(`Retrying database connection (${retries}/${maxRetries})...`);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      await connectWithRetry();
+    } else {
+      console.error('Failed to connect to database after retries:', err);
+      process.exit(1);
+    }
+  }
+};
+
+connectWithRetry();
 
 export default pool;

@@ -126,6 +126,19 @@ class UserService {
       throw error;
     }
   }
+
+  async createUser({ firebase_uid, email, name }) {
+    try {
+      const [result] = await db.execute(
+        'INSERT INTO Users (firebase_uid, email, name) VALUES (?, ?, ?)',
+        [firebase_uid, email, name]
+      );
+      return result.insertId;
+    } catch (error) {
+      console.error('Error creating user in database:', error);
+      throw error;
+    }
+  }
 }
 
 export default new UserService(); 

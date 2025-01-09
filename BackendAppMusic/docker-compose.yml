@@ -1,10 +1,10 @@
-version: '3.8'
-
 services:
   app:
     build: .
     ports:
       - "3000:3000"
+    networks:
+      - app-network
     environment:
       - DB_HOST=mysql
       - DB_USER=appmusic
@@ -18,33 +18,49 @@ services:
       - FIREBASE_CLIENT_EMAIL=firebase-adminsdk-vzz2e@app-mussic.iam.gserviceaccount.com
       - FIREBASE_CLIENT_ID=114734280250543782580
       - FIREBASE_CERT_URL=https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-vzz2e%40app-mussic.iam.gserviceaccount.com
+      - NODE_ENV=development
+      - PORT=3000
+      - HOST=0.0.0.0
     depends_on:
       mysql:
         condition: service_healthy
+      redis:
+        condition: service_started
+    restart: always
 
   mysql:
     image: mysql:8.0
-    command: --default-authentication-plugin=mysql_native_password
+    ports:
+      - "3307:3306"
     environment:
-      - MYSQL_ROOT_PASSWORD=root
-      - MYSQL_DATABASE=app_music
-      - MYSQL_USER=appmusic
-      - MYSQL_PASSWORD=appmusic123
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: app_music
+      MYSQL_USER: appmusic
+      MYSQL_PASSWORD: appmusic123
     volumes:
       - mysql_data:/var/lib/mysql
       - ./init/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    ports:
-      - "3307:3306"
+    networks:
+      - app-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u$$MYSQL_USER", "-p$$MYSQL_PASSWORD"]
+      interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
+      start_period: 10s
+    command: --default-authentication-plugin=mysql_native_password
+    restart: always
 
   redis:
-    image: redis:7.4
+    image: redis:alpine
     ports:
-      - "6380:6379"
+      - "6379:6379"
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
 
 volumes:
   mysql_data:
-  redis_data:

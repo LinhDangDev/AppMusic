@@ -1,29 +1,34 @@
-import admin from '../config/firebase.js';
-import { createError } from '../utils/error.js';
+import { auth } from '../config/firebase.js';
 
-const auth = async (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw createError('No token provided', 401);
+      return res.status(401).json({ message: 'Unauthorized' });
     }
 
     const token = authHeader.split(' ')[1];
     
     try {
-      const decodedToken = await admin.auth().verifyIdToken(token);
-      req.user = {
-        uid: decodedToken.uid,
-        email: decodedToken.email
-      };
+      // Verify ID token
+      const decodedToken = await auth.verifySessionCookie(token);
+      req.user = decodedToken;
       next();
     } catch (error) {
-      throw createError('Invalid token', 401);
+      // Nếu session cookie không hợp lệ, thử verify ID token
+      try {
+        const decodedToken = await auth.verifyIdToken(token);
+        req.user = decodedToken;
+        next();
+      } catch (idTokenError) {
+        console.error('Token verification failed:', idTokenError);
+        return res.status(401).json({ message: 'Invalid token' });
+      }
     }
   } catch (error) {
-    next(error);
+    console.error('Auth error:', error);
+    res.status(401).json({ message: 'Unauthorized' });
   }
 };
 
-export default auth;
+export default authMiddleware;

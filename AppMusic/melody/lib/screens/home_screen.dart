@@ -9,6 +9,8 @@ import 'package:melody/constants/app_colors.dart';
 import 'package:melody/widgets/bottom_player_nav.dart';
 import 'package:melody/models/genre.dart';
 import 'package:melody/widgets/genre_card.dart';
+import 'package:melody/services/auth_service.dart';
+import 'package:melody/screens/login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -18,6 +20,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
   double _scrollOpacity = 0.0;
+  bool _isLoading = false;
   final List<Genre> genres = [
     Genre(name: 'Romance', borderColor: Colors.red),
     Genre(name: 'Sad', borderColor: Colors.grey),
@@ -49,6 +52,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _checkAuth();
   }
 
   @override
@@ -162,11 +166,12 @@ class _HomeScreenState extends State<HomeScreen> {
         _buildMenuItem(Icons.person_outline, 'Profile'),
         _buildMenuItem(Icons.history, 'Recently played'),
         _buildMenuItem(Icons.settings, 'Settings and privacy'),
+        _buildMenuItem(Icons.logout, 'Logout', onTap: _handleLogout),
       ],
     );
   }
 
-  Widget _buildMenuItem(IconData icon, String title) {
+  Widget _buildMenuItem(IconData icon, String title, {Function()? onTap}) {
     return ListTile(
       leading: Container(
         padding: EdgeInsets.all(8),
@@ -177,7 +182,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Icon(icon, color: Colors.white),
       ),
       title: Text(title, style: TextStyle(color: Colors.white)),
-      onTap: () => Navigator.pop(context),
+      onTap: onTap ?? () => Navigator.pop(context),
     );
   }
 
@@ -226,6 +231,32 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _handleLogout() async {
+    try {
+      setState(() => _isLoading = true);
+
+      final authService = AuthService();
+      await authService.logout();
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => LoginScreen()),
+        (route) => false,
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Logout failed: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   @override
@@ -483,6 +514,17 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ],
     );
+  }
+
+  Future<void> _checkAuth() async {
+    final authService = AuthService();
+    final isLoggedIn = await authService.isLoggedIn();
+    if (!isLoggedIn && mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => LoginScreen()),
+      );
+    }
   }
 }
 
