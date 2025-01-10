@@ -5,24 +5,24 @@ class MusicService {
   // Thêm method getAllMusic
   async getAllMusic(limit = 20, offset = 0, sort = 'newest') {
     try {
-      // Convert limit và offset sang số nguyên
-      const limitNum = parseInt(limit);
-      const offsetNum = parseInt(offset);
+      // Convert params to numbers and set defaults
+      const limitNum = Number(limit) || 20;
+      const offsetNum = Number(offset) || 0;
 
       let orderBy;
       switch (sort) {
         case 'popular':
-          orderBy = 'm.play_count DESC';
+          orderBy = 'play_count DESC';
           break;
         case 'newest':
-          orderBy = 'm.created_at DESC';
+          orderBy = 'created_at DESC';
           break;
         default:
-          orderBy = 'm.created_at DESC';
+          orderBy = 'created_at DESC';
       }
 
       // Sử dụng query với tham số đã được convert
-      const [rows] = await db.execute(`
+      const [rows] = await db.query(`
         SELECT 
           m.*,
           a.name as artist_name,
@@ -34,12 +34,12 @@ class MusicService {
         LEFT JOIN Music_Genres mg ON m.id = mg.music_id
         LEFT JOIN Genres g ON mg.genre_id = g.id
         GROUP BY m.id
-        ORDER BY ${orderBy}
+        ORDER BY m.${orderBy}
         LIMIT ?, ?
       `, [offsetNum, limitNum]);
 
       // Đếm tổng số bài hát
-      const [totalRows] = await db.execute('SELECT COUNT(*) as total FROM Music');
+      const [totalRows] = await db.query('SELECT COUNT(*) as total FROM Music');
 
       // Format lại genres cho mỗi bài hát
       const formattedRows = rows.map(row => ({
@@ -49,12 +49,9 @@ class MusicService {
 
       return {
         items: formattedRows,
-        pagination: {
-          total: totalRows[0].total,
-          limit: limitNum,
-          offset: offsetNum,
-          hasMore: offsetNum + limitNum < totalRows[0].total
-        }
+        total: totalRows[0].total,
+        limit: limitNum,
+        offset: offsetNum
       };
     } catch (error) {
       console.error('Error getting all music:', error);
@@ -65,7 +62,7 @@ class MusicService {
   // Thêm method getMusicById
   async getMusicById(id) {
     try {
-      const [rows] = await db.execute(`
+      const [rows] = await db.query(`
         SELECT 
           m.*,
           a.name as artist_name,
@@ -84,7 +81,6 @@ class MusicService {
         return null;
       }
 
-      // Format lại genres
       const music = rows[0];
       music.genres = music.genres ? music.genres.split(',') : [];
       
@@ -96,7 +92,7 @@ class MusicService {
   }
 
   // Search trong database
-  async searchDatabase(query, limit = 20, offset = 0) {
+  async searchDatabase(query, limit = 20) {
     try {
       const searchQuery = `%${query}%`;
       const [rows] = await db.query(

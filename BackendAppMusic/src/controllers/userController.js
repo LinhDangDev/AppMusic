@@ -4,7 +4,8 @@ import { createError } from '../utils/error.js';
 class UserController {
   async getCurrentUser(req, res, next) {
     try {
-      const user = await userService.getUserById(req.user.uid);
+      const userId = req.user?.id || 1; // Mặc định user 1 nếu chưa có auth
+      const user = await userService.getUserById(userId);
       res.json({
         status: 'success',
         data: user
@@ -57,7 +58,8 @@ class UserController {
 
   async getFavorites(req, res, next) {
     try {
-      const favorites = await userService.getFavorites(req.user.uid);
+      const userId = req.user?.id || 1; // Mặc định user 1 nếu chưa có auth
+      const favorites = await userService.getFavorites(userId);
       res.json({
         status: 'success',
         data: favorites
@@ -69,9 +71,10 @@ class UserController {
 
   async addToFavorites(req, res, next) {
     try {
+      const userId = req.user?.id || 1; // Mặc định user 1 nếu chưa có auth
       const { musicId } = req.params;
-      await userService.addToFavorites(req.user.uid, musicId);
-      res.status(201).json({
+      await userService.addToFavorites(userId, musicId);
+      res.json({
         status: 'success',
         message: 'Added to favorites'
       });
@@ -82,9 +85,13 @@ class UserController {
 
   async removeFromFavorites(req, res, next) {
     try {
+      const userId = req.user?.id || 1; // Mặc định user 1 nếu chưa có auth
       const { musicId } = req.params;
-      await userService.removeFromFavorites(req.user.uid, musicId);
-      res.status(204).send();
+      await userService.removeFromFavorites(userId, musicId);
+      res.json({
+        status: 'success',
+        message: 'Removed from favorites'
+      });
     } catch (error) {
       next(error);
     }

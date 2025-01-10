@@ -7,15 +7,15 @@ import genreRoutes from './genreRoutes.js';
 
 const router = express.Router();
 
-// Mount các routes
-router.use('/music', musicRoutes);
-router.use('/artists', artistRoutes);
-router.use('/playlists', playlistRoutes);
-router.use('/users', userRoutes);
-router.use('/genres', genreRoutes);
+// Mount các routes với prefix /api
+router.use('/api/music', musicRoutes);
+router.use('/api/artists', artistRoutes);
+router.use('/api/playlists', playlistRoutes);
+router.use('/api/users', userRoutes);
+router.use('/api/genres', genreRoutes);
 
 // Health check route
-router.get('/health', (req, res) => {
+router.get('/api/health', (req, res) => {
   res.json({
     status: 'success',
     message: 'API is running'

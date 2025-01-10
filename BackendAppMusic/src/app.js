@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { connectWithRetry } from './model/db.js';
 import initService from './services/initService.js';
-import musicRoutes from './routes/musicRoutes.js';
+import routes from './routes/index.js';
 import errorHandler from './middleware/errorHandler.js';
 import cron from 'node-cron';
 import genreService from './services/genreService.js';
@@ -13,8 +13,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Routes
-app.use('/api/music', musicRoutes);
+// Mount routes
+app.use('/', routes);
 
 // Error handling
 app.use(errorHandler);

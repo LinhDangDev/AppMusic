@@ -5,17 +5,11 @@ import rankingService from '../services/rankingService.js';
 class MusicController {
   async getAllMusic(req, res, next) {
     try {
-      const { limit = 20, offset = 0, sort = 'newest' } = req.query;
-      const result = await musicService.getAllMusic(
-        parseInt(limit),
-        parseInt(offset),
-        sort
-      );
-
+      const { limit, offset, sort } = req.query;
+      const result = await musicService.getAllMusic(limit, offset, sort);
       res.json({
-        success: true,
-        data: result.items,
-        pagination: result.pagination
+        status: 'success',
+        data: result
       });
     } catch (error) {
       next(error);
@@ -140,15 +134,9 @@ class MusicController {
   async getRankings(req, res, next) {
     try {
       const { region } = req.params;
-      const { limit = 100 } = req.query;
-      
-      const rankings = await rankingService.getTopSongs(
-        region.toUpperCase(),
-        parseInt(limit)
-      );
-      
+      const rankings = await rankingService.getRankings(region);
       res.json({
-        success: true,
+        status: 'success',
         data: rankings
       });
     } catch (error) {

@@ -1,12 +1,10 @@
 import express from 'express';
-import auth from '../middleware/auth.js';
 import artistController from '../controllers/artistController.js';
 
 const router = express.Router();
 
-router.get('/', auth, artistController.getAllArtists);
-router.get('/:id', auth, artistController.getArtistById);
-router.get('/:id/songs', auth, artistController.getArtistSongs);
-router.get('/search', auth, artistController.searchArtists);
+router.get('/', artistController.getAllArtists);
+router.get('/:id', artistController.getArtistById);
+router.get('/:id/songs', artistController.getArtistSongs);
 
 export default router;

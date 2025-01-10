@@ -1,8 +1,6 @@
 {
     "info": {
-        "_postman_id": "random-uuid",
         "name": "Music App API",
-        "description": "Collection for testing Music App APIs",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
     },
     "item": [
@@ -13,113 +11,29 @@
                     "name": "Get All Music",
                     "request": {
                         "method": "GET",
-                        "url": {
-                            "raw": "{{base_url}}/music?limit=20&offset=0&sort=newest",
-                            "host": ["{{base_url}}"],
-                            "path": ["music"],
-                            "query": [
-                                {
-                                    "key": "limit",
-                                    "value": "20"
-                                },
-                                {
-                                    "key": "offset",
-                                    "value": "0"
-                                },
-                                {
-                                    "key": "sort",
-                                    "value": "newest"
-                                }
-                            ]
-                        }
+                        "url": "{{base_url}}/api/music",
+                        "query": [
+                            {"key": "limit", "value": "20"},
+                            {"key": "offset", "value": "0"},
+                            {"key": "sort", "value": "newest"}
+                        ]
                     }
                 },
                 {
                     "name": "Search Music",
                     "request": {
                         "method": "GET",
-                        "url": {
-                            "raw": "{{base_url}}/music/search?q=love&limit=20",
-                            "host": ["{{base_url}}"],
-                            "path": ["music", "search"],
-                            "query": [
-                                {
-                                    "key": "q",
-                                    "value": "love"
-                                },
-                                {
-                                    "key": "limit",
-                                    "value": "20"
-                                }
-                            ]
-                        }
+                        "url": "{{base_url}}/api/music/search",
+                        "query": [
+                            {"key": "q", "value": "love"}
+                        ]
                     }
                 },
                 {
                     "name": "Get Music Rankings",
                     "request": {
                         "method": "GET",
-                        "url": {
-                            "raw": "{{base_url}}/music/rankings/US",
-                            "host": ["{{base_url}}"],
-                            "path": ["music", "rankings", "US"]
-                        }
-                    }
-                }
-            ]
-        },
-        {
-            "name": "Playlists",
-            "item": [
-                {
-                    "name": "Get All Playlists",
-                    "request": {
-                        "method": "GET",
-                        "url": {
-                            "raw": "{{base_url}}/playlists",
-                            "host": ["{{base_url}}"],
-                            "path": ["playlists"]
-                        }
-                    }
-                },
-                {
-                    "name": "Create Playlist",
-                    "request": {
-                        "method": "POST",
-                        "url": {
-                            "raw": "{{base_url}}/playlists",
-                            "host": ["{{base_url}}"],
-                            "path": ["playlists"]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"name\": \"My New Playlist\",\n  \"description\": \"A collection of my favorite songs\"\n}",
-                            "options": {
-                                "raw": {
-                                    "language": "json"
-                                }
-                            }
-                        }
-                    }
-                },
-                {
-                    "name": "Add Song to Playlist",
-                    "request": {
-                        "method": "POST",
-                        "url": {
-                            "raw": "{{base_url}}/playlists/{{playlist_id}}/songs",
-                            "host": ["{{base_url}}"],
-                            "path": ["playlists", "{{playlist_id}}", "songs"]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"musicId\": \"{{music_id}}\"\n}",
-                            "options": {
-                                "raw": {
-                                    "language": "json"
-                                }
-                            }
-                        }
+                        "url": "{{base_url}}/api/music/rankings/VN"
                     }
                 }
             ]
@@ -131,21 +45,65 @@
                     "name": "Get All Artists",
                     "request": {
                         "method": "GET",
-                        "url": {
-                            "raw": "{{base_url}}/artists",
-                            "host": ["{{base_url}}"],
-                            "path": ["artists"]
-                        }
+                        "url": "{{base_url}}/api/artists"
+                    }
+                },
+                {
+                    "name": "Get Artist By ID",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{base_url}}/api/artists/1"
                     }
                 },
                 {
                     "name": "Get Artist Songs",
                     "request": {
                         "method": "GET",
-                        "url": {
-                            "raw": "{{base_url}}/artists/{{artist_id}}/songs",
-                            "host": ["{{base_url}}"],
-                            "path": ["artists", "{{artist_id}}", "songs"]
+                        "url": "{{base_url}}/api/artists/1/songs"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Playlists",
+            "item": [
+                {
+                    "name": "Get All Playlists",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{base_url}}/api/playlists"
+                    }
+                },
+                {
+                    "name": "Create Playlist",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{base_url}}/api/playlists",
+                        "header": {
+                            "Content-Type": "application/json"
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": {
+                                "name": "My Playlist",
+                                "description": "My favorite songs"
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "Add Song to Playlist",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{base_url}}/api/playlists/1/songs",
+                        "header": {
+                            "Content-Type": "application/json"
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": {
+                                "musicId": 1
+                            }
                         }
                     }
                 }
@@ -158,22 +116,14 @@
                     "name": "Get All Genres",
                     "request": {
                         "method": "GET",
-                        "url": {
-                            "raw": "{{base_url}}/genres",
-                            "host": ["{{base_url}}"],
-                            "path": ["genres"]
-                        }
+                        "url": "{{base_url}}/api/genres"
                     }
                 },
                 {
                     "name": "Get Genre Songs",
                     "request": {
                         "method": "GET",
-                        "url": {
-                            "raw": "{{base_url}}/genres/{{genre_id}}/songs",
-                            "host": ["{{base_url}}"],
-                            "path": ["genres", "{{genre_id}}", "songs"]
-                        }
+                        "url": "{{base_url}}/api/genres/1/songs"
                     }
                 }
             ]
@@ -185,78 +135,37 @@
                     "name": "Get Current User",
                     "request": {
                         "method": "GET",
-                        "url": {
-                            "raw": "{{base_url}}/users/me",
-                            "host": ["{{base_url}}"],
-                            "path": ["users", "me"]
-                        }
+                        "url": "{{base_url}}/api/users/me"
                     }
                 },
                 {
                     "name": "Get User Favorites",
                     "request": {
                         "method": "GET",
-                        "url": {
-                            "raw": "{{base_url}}/users/me/favorites",
-                            "host": ["{{base_url}}"],
-                            "path": ["users", "me", "favorites"]
-                        }
+                        "url": "{{base_url}}/api/users/me/favorites"
                     }
                 },
                 {
                     "name": "Add to Favorites",
                     "request": {
                         "method": "POST",
-                        "url": {
-                            "raw": "{{base_url}}/users/me/favorites/{{music_id}}",
-                            "host": ["{{base_url}}"],
-                            "path": ["users", "me", "favorites", "{{music_id}}"]
-                        }
+                        "url": "{{base_url}}/api/users/me/favorites/1"
+                    }
+                },
+                {
+                    "name": "Remove from Favorites",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{base_url}}/api/users/me/favorites/1"
                     }
                 }
             ]
         }
     ],
-    "event": [
-        {
-            "listen": "prerequest",
-            "script": {
-                "type": "text/javascript",
-                "exec": [""]
-            }
-        },
-        {
-            "listen": "test",
-            "script": {
-                "type": "text/javascript",
-                "exec": [""]
-            }
-        }
-    ],
     "variable": [
         {
             "key": "base_url",
-            "value": "http://localhost:3000/api",
-            "type": "string"
-        },
-        {
-            "key": "playlist_id",
-            "value": "1",
-            "type": "string"
-        },
-        {
-            "key": "music_id",
-            "value": "1",
-            "type": "string"
-        },
-        {
-            "key": "artist_id",
-            "value": "1",
-            "type": "string"
-        },
-        {
-            "key": "genre_id",
-            "value": "1",
+            "value": "http://localhost:3000",
             "type": "string"
         }
     ]
