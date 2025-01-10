@@ -1,0 +1,233 @@
+{
+	"info": {
+		"_postman_id": "6958ea39-30e5-445c-ab7f-9e12afb84bf3",
+		"name": "Music App API",
+		"schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
+		"_exporter_id": "18429925"
+	},
+	"item": [
+		{
+			"name": "Music",
+			"item": [
+				{
+					"name": "Get All Music",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/music"
+					},
+					"response": []
+				},
+				{
+					"name": "Search Music",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/music/search?q=alone",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"music",
+								"search"
+							],
+							"query": [
+								{
+									"key": "q",
+									"value": "alone"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Music Rankings",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/music/rankings/US"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Artists",
+			"item": [
+				{
+					"name": "Get All Artists",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/artists"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Artist By ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/artists/2"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Artist Songs",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/artists/5/songs"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Playlists",
+			"item": [
+				{
+					"name": "Get All Playlists",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/playlists"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Playlist",
+					"request": {
+						"method": "POST",
+						"header": [
+							{}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"name\" : \"Top\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/playlists?name=Top",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"playlists"
+							],
+							"query": [
+								{
+									"key": "name",
+									"value": "Top"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Add Song to Playlist",
+					"request": {
+						"method": "POST",
+						"header": [
+							{}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": "{{base_url}}/api/playlists/1/songs"
+					},
+					"response": []
+				},
+				{
+					"name": "New Request",
+					"request": {
+						"method": "GET",
+						"header": []
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Genres",
+			"item": [
+				{
+					"name": "Get All Genres",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/genres"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Genre Songs",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/genres/1/songs"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Users",
+			"item": [
+				{
+					"name": "Get Current User",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/users/me"
+					},
+					"response": []
+				},
+				{
+					"name": "Get User Favorites",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/users/me/favorites"
+					},
+					"response": []
+				},
+				{
+					"name": "Add to Favorites",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": "{{base_url}}/api/users/me/favorites/1"
+					},
+					"response": []
+				},
+				{
+					"name": "Remove from Favorites",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": "{{base_url}}/api/users/me/favorites/1"
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000",
+			"type": "string"
+		}
+	]
+}

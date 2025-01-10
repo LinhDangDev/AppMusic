@@ -3,6 +3,21 @@ import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 
 class PlayerScreen extends StatefulWidget {
+  final String? songTitle;
+  final String? artistName;
+  final String? imageUrl;
+  final bool isPlaying;
+  final VoidCallback? onPlayPause;
+
+  const PlayerScreen({
+    Key? key,
+    this.songTitle,
+    this.artistName,
+    this.imageUrl,
+    this.isPlaying = false,
+    this.onPlayPause,
+  }) : super(key: key);
+
   @override
   _PlayerScreenState createState() => _PlayerScreenState();
 }

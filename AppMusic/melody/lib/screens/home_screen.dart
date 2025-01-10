@@ -9,8 +9,8 @@ import 'package:melody/constants/app_colors.dart';
 import 'package:melody/widgets/bottom_player_nav.dart';
 import 'package:melody/models/genre.dart';
 import 'package:melody/widgets/genre_card.dart';
-import 'package:melody/services/auth_service.dart';
-import 'package:melody/screens/login_screen.dart';
+import 'package:melody/models/music.dart';
+import 'package:melody/services/music_service.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -20,45 +20,36 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
   double _scrollOpacity = 0.0;
-  bool _isLoading = false;
-  final List<Genre> genres = [
-    Genre(name: 'Romance', borderColor: Colors.red),
-    Genre(name: 'Sad', borderColor: Colors.grey),
-    Genre(name: 'R&B & Soul', borderColor: Colors.purple),
-    Genre(name: 'Party', borderColor: Colors.deepPurple),
-    Genre(name: 'Mandopop & Cantopop', borderColor: Colors.orange),
-    Genre(name: 'Folk & Acoustic', borderColor: Colors.green),
-    Genre(name: 'K-Pop', borderColor: Colors.purple),
-    Genre(name: 'Feel Good', borderColor: Colors.lightGreen),
-    Genre(name: 'Hip-Hop', borderColor: Colors.deepOrange),
-    Genre(name: 'Sleep', borderColor: Colors.purple),
-    Genre(name: 'Workout', borderColor: Colors.orange),
-    Genre(name: 'Family', borderColor: Colors.cyan),
-    Genre(name: 'Commute', borderColor: Colors.amber),
-    Genre(name: 'Chill', borderColor: Colors.lightBlue),
-    Genre(name: 'Focus', borderColor: Colors.white),
-    Genre(name: 'Dance & Electronic', borderColor: Colors.cyan),
-    Genre(name: 'Classical', borderColor: Colors.grey),
-    Genre(name: '2000s', borderColor: Colors.green),
-    Genre(name: 'Pop', borderColor: Colors.pink),
-    Genre(name: 'Korean Hip-Hop', borderColor: Colors.orange),
-    Genre(name: 'Energy Boosters', borderColor: Colors.yellow),
-    Genre(name: 'Soundtracks & Musicals', borderColor: Colors.cyan),
-    Genre(name: '1980s', borderColor: Colors.green),
-    Genre(name: 'Indie & Alternative', borderColor: Colors.white),
-  ];
+  bool _isLoading = true;
+  final MusicService _musicService = MusicService();
+  List<Music> _allMusic = [];
+  List<Music> _rankings = [];
+  List<Genre> _genres = [];
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    _checkAuth();
+    _loadData();
   }
 
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    try {
+      final allMusic = await _musicService.getAllMusic();
+      final rankings = await _musicService.getMusicRankings('VN');
+      final genres = await _musicService.getAllGenres();
+
+      setState(() {
+        _allMusic = allMusic;
+        _rankings = rankings;
+        _genres = genres;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Load data error: $e');
+      setState(() => _isLoading = false);
+    }
   }
 
   void _onScroll() {
@@ -166,7 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _buildMenuItem(Icons.person_outline, 'Profile'),
         _buildMenuItem(Icons.history, 'Recently played'),
         _buildMenuItem(Icons.settings, 'Settings and privacy'),
-        _buildMenuItem(Icons.logout, 'Logout', onTap: _handleLogout),
+        // _buildMenuItem(Icons.logout, 'Logout', onTap: _handleLogout),
       ],
     );
   }
@@ -192,71 +183,31 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Notifications',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            "You don't have any updates, yet...",
-            style: TextStyle(color: Colors.grey[400]),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'When you get playlist likes, followers,\nand more, you ll get a notification here.',
-            style: TextStyle(color: Colors.grey[400], fontSize: 12),
-          ),
           SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue,
+                padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                 ),
-                padding: EdgeInsets.symmetric(vertical: 12),
               ),
               onPressed: () {},
               child: Text(
-                'Create a Blend',
-                style: TextStyle(color: Colors.white),
+                'Upgrade to Premium',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),
         ],
       ),
     );
-  }
-
-  Future<void> _handleLogout() async {
-    try {
-      setState(() => _isLoading = true);
-
-      final authService = AuthService();
-      await authService.logout();
-
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => LoginScreen()),
-        (route) => false,
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Logout failed: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
   }
 
   @override
@@ -284,14 +235,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SectionTitle('Recently played'),
+                          // SectionTitle('Recently played'),
                           SizedBox(height: 10),
                           _buildRecentlyPlayed(),
-                          SectionTitle('To get you started'),
+                          // SectionTitle('To get you started'),
                           SizedBox(height: 15),
                           _buildPlaylists(),
                           SizedBox(height: 32),
-                          SectionTitle("Today's Biggest Hits"),
+                          // SectionTitle("Today's Biggest Hits"),
                           SizedBox(height: 15),
                           _buildBiggestHits(),
                           SizedBox(height: 32),
@@ -409,59 +360,96 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildPlaylists() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          _buildPlaylistCard(
-              'Daily Mix 1', 'Six60, Mitch James, Tiki Taane And More'),
-          SizedBox(width: 12),
-          _buildPlaylistCard(
-              'Daily Mix 2', 'Six60, Mitch James, Tiki Taane And More'),
-          SizedBox(width: 12),
-          _buildPlaylistCard(
-              'Daily Mix 3', 'Six60, Mitch James, Tiki Taane And More'),
-          SizedBox(width: 12),
-          _buildPlaylistCard(
-              'Daily Mix 4', 'Six60, Mitch James, Tiki Taane And More'),
-        ],
-      ),
-    );
-  }
+    if (_isLoading) {
+      return Center(child: CircularProgressIndicator());
+    }
 
-  Widget _buildPlaylistCard(String title, String subtitle) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => PlayerScreen()),
-        );
-      },
-      child: PlaylistCard(
-        imageUrl: 'assets/playlist1.png',
-        title: title,
-        subtitle: subtitle,
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            'Get You Started',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        SizedBox(height: 16),
+        SizedBox(
+          height: 200,
+          child: ListView.builder(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            scrollDirection: Axis.horizontal,
+            itemCount: _allMusic.length,
+            itemBuilder: (context, index) {
+              final music = _allMusic[index];
+              return Padding(
+                padding: EdgeInsets.only(right: 16),
+                child: MusicCard(
+                  imageUrl: music.displayImage,
+                  title: music.title,
+                  subtitle: music.artistName,
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildBiggestHits() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          _buildPlaylistCard('Adam French, Bella', 'M1, Twiceyoung And'),
-          SizedBox(width: 12),
-          _buildPlaylistCard('Canyon City, Marc', 'Scibilia, Oh Honey And'),
-          SizedBox(width: 12),
-          _buildPlaylistCard('Six60', 'Tiki Taa'),
-          SizedBox(width: 12),
-        ],
-      ),
+    if (_isLoading) {
+      return Center(child: CircularProgressIndicator());
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            'Today\'s Biggest Hits',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        SizedBox(height: 16),
+        SizedBox(
+          height: 200,
+          child: ListView.builder(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            scrollDirection: Axis.horizontal,
+            itemCount: _rankings.length,
+            itemBuilder: (context, index) {
+              final music = _rankings[index];
+              return Padding(
+                padding: EdgeInsets.only(right: 16),
+                child: MusicCard(
+                  imageUrl: music.displayImage,
+                  title: music.title,
+                  subtitle: music.artistName,
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildGenres() {
+    if (_isLoading) {
+      return Center(child: CircularProgressIndicator());
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -495,16 +483,16 @@ class _HomeScreenState extends State<HomeScreen> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                for (var i = 0; i < genres.length; i += 2)
-                  if (i + 1 < genres.length)
+                for (var i = 0; i < _genres.length; i += 2)
+                  if (i + 1 < _genres.length)
                     Container(
                       margin: EdgeInsets.only(right: 8),
                       child: Column(
                         children: [
-                          GenreCard(genre: genres[i]),
+                          GenreCard(genre: _genres[i]),
                           SizedBox(height: 8),
-                          if (i + 1 < genres.length)
-                            GenreCard(genre: genres[i + 1]),
+                          if (i + 1 < _genres.length)
+                            GenreCard(genre: _genres[i + 1]),
                         ],
                       ),
                     ),
@@ -514,17 +502,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ],
     );
-  }
-
-  Future<void> _checkAuth() async {
-    final authService = AuthService();
-    final isLoggedIn = await authService.isLoggedIn();
-    if (!isLoggedIn && mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => LoginScreen()),
-      );
-    }
   }
 }
 
@@ -549,92 +526,81 @@ class SectionTitle extends StatelessWidget {
   }
 }
 
-class PlaylistCard extends StatelessWidget {
+class MusicCard extends StatelessWidget {
   final String imageUrl;
   final String title;
   final String subtitle;
 
-  PlaylistCard({
+  const MusicCard({
+    Key? key,
     required this.imageUrl,
     required this.title,
     required this.subtitle,
-  });
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 200,
-      height: 260,
-      decoration: BoxDecoration(
-        color: Color(0xFF282828),
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            offset: Offset(0, 4),
-            blurRadius: 15,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
+    return GestureDetector(
+      onTap: () {
+        // Handle tap
+      },
+      child: Container(
+        width: 150,
+        height: 200,
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
           borderRadius: BorderRadius.circular(8),
-          onTap: () {},
-          child: Container(
-            clipBehavior: Clip.hardEdge,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+              child: Image.network(
+                imageUrl,
+                height: 120,
+                width: 150,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    height: 120,
+                    width: 150,
+                    color: Colors.grey[800],
+                    child: Icon(Icons.music_note, color: Colors.white),
+                  );
+                },
+              ),
             ),
-            child: Column(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: Container(
-                    width: double.infinity,
-                    child: Image.asset(
-                      imageUrl,
-                      fit: BoxFit.cover,
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.all(8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ),
-                Expanded(
-                  flex: 1,
-                  child: Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          title,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          subtitle,
-                          style: TextStyle(
-                            color: Colors.grey[400],
-                            fontSize: 11,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                    SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 12,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );

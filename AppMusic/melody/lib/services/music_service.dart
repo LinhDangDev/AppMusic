@@ -1,90 +1,68 @@
 import 'package:dio/dio.dart';
-import 'package:melody/services/auth_service.dart';
+import 'package:melody/models/music.dart';
+import 'package:melody/models/genre.dart';
+import 'package:melody/models/search_result.dart';
 
 class MusicService {
-  final String baseUrl = 'http://192.168.102.4:3000/api';
+  final String baseUrl = 'http://192.168.102.4:3000';
+  // final String baseUrl = 'http://192.168.1.xxx:3000';
   final Dio _dio = Dio();
-  final AuthService _authService = AuthService();
 
-  Future<List<dynamic>> searchMusic(String query) async {
+  MusicService() {
+    _dio.interceptors.add(LogInterceptor(
+      requestBody: true,
+      responseBody: true,
+      logPrint: (obj) => print('Dio Log: $obj'),
+    ));
+  }
+
+  Future<List<Music>> getAllMusic() async {
     try {
-      // Lấy token từ AuthService
-      final token = await _authService.getToken();
-      if (token == null) {
-        throw Exception('Vui lòng đăng nhập để tiếp tục');
-      }
+      final response = await _dio.get('$baseUrl/api/music');
+      final Map<String, dynamic> responseData = response.data;
+      final List<dynamic> items = responseData['data']['items'] ?? [];
+      return items.map((item) => Music.fromJson(item)).toList();
+    } catch (e) {
+      print('Get All Music Error: $e');
+      return [];
+    }
+  }
 
+  Future<List<Music>> getMusicRankings(String country) async {
+    try {
+      final response = await _dio.get('$baseUrl/api/music/rankings/$country');
+      final Map<String, dynamic> responseData = response.data;
+      final List<dynamic> items = responseData['data']['rankings'] ?? [];
+      return items.map((item) => Music.fromJson(item)).toList();
+    } catch (e) {
+      print('Get Music Rankings Error: $e');
+      return [];
+    }
+  }
+
+  Future<List<SearchResult>> searchMusic(String query) async {
+    try {
       final response = await _dio.get(
-        '$baseUrl/music/search',
+        '$baseUrl/api/music/search',
         queryParameters: {'q': query},
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $token',
-          },
-        ),
       );
-
-      if (response.statusCode == 200 && response.data['status'] == 'success') {
-        return response.data['data'] ?? [];
-      } else {
-        throw Exception(response.data['message'] ?? 'Không tìm thấy kết quả');
-      }
-    } on DioError catch (e) {
-      if (e.response?.statusCode == 401) {
-        throw Exception('Phiên đăng nhập đã hết hạn');
-      }
-      throw Exception('Lỗi kết nối: ${e.message}');
+      final List<dynamic> items = response.data['data'] ?? [];
+      return items.take(10).map((item) => SearchResult.fromJson(item)).toList();
     } catch (e) {
-      print('Search Error: $e');
-      throw Exception('Có lỗi xảy ra khi tìm kiếm');
+      print('Search Music Error: $e');
+      return [];
     }
   }
 
-  Future<String> getStreamUrl(String musicId) async {
+  Future<List<Genre>> getAllGenres() async {
     try {
-      final token = await _authService.getToken();
-      if (token == null) {
-        throw Exception('Vui lòng đăng nhập để tiếp tục');
-      }
-
-      final response = await _dio.get(
-        '$baseUrl/music/$musicId/stream',
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $token',
-          },
-        ),
-      );
-
-      if (response.statusCode == 200 && response.data['status'] == 'success') {
-        return response.data['data']['streamUrl'];
-      } else {
-        throw Exception('Không thể lấy đường dẫn phát nhạc');
-      }
+      final response = await _dio.get('$baseUrl/api/genres');
+      final Map<String, dynamic> responseData = response.data;
+      final List<dynamic> items = responseData['data'] ?? [];
+      return items.map((item) => Genre.fromJson(item)).toList();
     } catch (e) {
-      print('Get Stream URL Error: $e');
-      throw Exception('Có lỗi xảy ra khi lấy đường dẫn phát nhạc');
+      print('Get All Genres Error: $e');
+      return [];
     }
   }
-
-  Future<void> recordPlay(String musicId) async {
-    try {
-      final token = await _authService.getToken();
-      if (token == null) {
-        throw Exception('Vui lòng đăng nhập để tiếp tục');
-      }
-
-      await _dio.post(
-        '$baseUrl/music/$musicId/play',
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $token',
-          },
-        ),
-      );
-    } catch (e) {
-      print('Record Play Error: $e');
-      // Có thể bỏ qua lỗi này vì không ảnh hưởng đến trải nghiệm người dùng
-    }
-  }
-} 
+}

@@ -7,10 +7,22 @@ import 'package:melody/screens/premium_screen.dart';
 
 class BottomPlayerNav extends StatelessWidget {
   final int currentIndex;
+  final bool isPlaying;
+  final String? currentSongTitle;
+  final String? currentArtist;
+  final String? currentImageUrl;
+  final VoidCallback? onPlayPause;
+  final VoidCallback? onTapPlayer;
 
   const BottomPlayerNav({
     Key? key,
     required this.currentIndex,
+    this.isPlaying = false,
+    this.currentSongTitle,
+    this.currentArtist,
+    this.currentImageUrl,
+    this.onPlayPause,
+    this.onTapPlayer,
   }) : super(key: key);
 
   @override
@@ -19,109 +31,125 @@ class BottomPlayerNav extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         // Mini Player
-        Padding(
-          padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: GestureDetector(
+        if (currentSongTitle != null)
+          GestureDetector(
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => PlayerScreen()),
+              MaterialPageRoute(
+                builder: (context) => PlayerScreen(
+                  songTitle: currentSongTitle,
+                  artistName: currentArtist,
+                  imageUrl: currentImageUrl,
+                  isPlaying: isPlaying,
+                  onPlayPause: onPlayPause,
+                ),
+              ),
             ),
             child: Container(
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.5),
-                borderRadius: BorderRadius.circular(12),
-              ),
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Image.asset(
-                        'assets/playlist1.png',
-                        width: 40,
-                        height: 40,
-                      ),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Song Title',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            Text(
-                              'Artist Name',
-                              style: TextStyle(
-                                color: Colors.grey[400],
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Icon(Icons.favorite_border, color: Colors.white),
-                      SizedBox(width: 16),
-                      Icon(Icons.play_arrow, color: Colors.white),
-                    ],
+              decoration: BoxDecoration(
+                color: Colors.grey[900],
+                border: Border(
+                  top: BorderSide(
+                    color: Colors.grey[800]!,
+                    width: 0.5,
                   ),
-                  SizedBox(height: 8),
-                  Container(
-                    height: 2,
-                    child: LinearProgressIndicator(
-                      value: 0.7,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                      backgroundColor: Colors.grey[800],
+                ),
+              ),
+              child: Row(
+                children: [
+                  // Album Art
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: Image.asset(
+                      currentImageUrl ?? 'assets/playlist1.png',
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.cover,
                     ),
+                  ),
+                  SizedBox(width: 12),
+                  
+                  // Song Info
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          currentSongTitle ?? 'No song playing',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          currentArtist ?? 'Unknown artist',
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 12,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  // Play/Pause Button
+                  IconButton(
+                    icon: Icon(
+                      isPlaying ? Icons.pause : Icons.play_arrow,
+                      color: Colors.white,
+                      size: 32,
+                    ),
+                    onPressed: onPlayPause,
                   ),
                 ],
               ),
             ),
           ),
-        ),
 
         // Bottom Navigation Bar
-        Padding(
-          padding: EdgeInsets.all(16),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(25),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.5),
+            borderRadius: BorderRadius.circular(25),
+          ),
+          margin: EdgeInsets.all(16),
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              canvasColor: Colors.transparent,
             ),
-            child: Theme(
-              data: Theme.of(context).copyWith(
-                canvasColor: Colors.transparent,
-              ),
-              child: BottomNavigationBar(
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                selectedItemColor: Colors.white,
-                unselectedItemColor: Colors.grey,
-                type: BottomNavigationBarType.fixed,
-                currentIndex: currentIndex,
-                items: [
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.home, size: 28),
-                    label: 'Home',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.search, size: 28),
-                    label: 'Search',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.library_music, size: 28),
-                    label: 'Your Library',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.person, size: 28),
-                    label: 'Premium',
-                  ),
-                ],
-                onTap: (index) => _handleNavigation(context, index),
-              ),
+            child: BottomNavigationBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              selectedItemColor: Colors.white,
+              unselectedItemColor: Colors.grey,
+              type: BottomNavigationBarType.fixed,
+              currentIndex: currentIndex,
+              items: [
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.home, size: 28),
+                  label: 'Home',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.search, size: 28),
+                  label: 'Search',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.library_music, size: 28),
+                  label: 'Your Library',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.person, size: 28),
+                  label: 'Premium',
+                ),
+              ],
+              onTap: (index) => _handleNavigation(context, index),
             ),
           ),
         ),

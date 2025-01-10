@@ -4,13 +4,9 @@ import 'screens/home_screen.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:melody/services/audio_handler.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:melody/screens/login_screen.dart';
-import 'package:melody/screens/register_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
   await initializeService();
   runApp(const MyApp());
 }
@@ -43,10 +39,8 @@ class MyApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: LoginScreen(),
+      home: HomeScreen(),
       routes: {
-        '/login': (context) => LoginScreen(),
-        '/register': (context) => RegisterScreen(),
         '/home': (context) => HomeScreen(),
       },
     );
