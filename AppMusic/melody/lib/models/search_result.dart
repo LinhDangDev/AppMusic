@@ -2,26 +2,24 @@ class SearchResult {
   final String id;
   final String title;
   final String artistName;
-  final String? imageUrl;
-  final String? youtubeThumbnail;
-
-  String get displayImage => youtubeThumbnail ?? imageUrl ?? 'assets/default_music.png';
+  final String displayImage;
+  final String youtubeId;
 
   SearchResult({
     required this.id,
     required this.title,
     required this.artistName,
-    this.imageUrl,
-    this.youtubeThumbnail,
+    required this.displayImage,
+    required this.youtubeId,
   });
 
   factory SearchResult.fromJson(Map<String, dynamic> json) {
     return SearchResult(
-      id: json['id'].toString(),
-      title: json['title'] as String,
-      artistName: json['artist_name'] as String,
-      imageUrl: json['image_url'] as String?,
-      youtubeThumbnail: json['youtube_thumbnail'] as String?,
+      id: json['id'],
+      title: json['title'],
+      artistName: json['artist_name'],
+      displayImage: json['image_url'],
+      youtubeId: json['id'].toString().replaceAll('yt_', ''),
     );
   }
 } 

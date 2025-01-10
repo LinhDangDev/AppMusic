@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:melody/screens/home_screen.dart';
-import 'screens/home_screen.dart';
 import 'package:audio_service/audio_service.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:melody/services/audio_handler.dart';
+import 'package:get/get.dart';
+import 'package:melody/provider/music_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeService();
+  
+  Get.put(MusicController());
+  
   runApp(const MyApp());
 }
 
@@ -27,21 +30,21 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return GetMaterialApp(
       title: 'Music App',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         scaffoldBackgroundColor: Colors.black,
-        bottomSheetTheme: BottomSheetThemeData(
+        bottomSheetTheme: const BottomSheetThemeData(
           backgroundColor: Colors.transparent,
           modalBackgroundColor: Colors.transparent,
         ),
         useMaterial3: true,
       ),
-      home: HomeScreen(),
+      home: const HomeScreen(),
       routes: {
-        '/home': (context) => HomeScreen(),
+        '/home': (context) => const HomeScreen(),
       },
     );
   }

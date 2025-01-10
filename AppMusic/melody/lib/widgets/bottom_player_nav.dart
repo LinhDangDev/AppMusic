@@ -4,13 +4,15 @@ import 'package:melody/screens/home_screen.dart';
 import 'package:melody/screens/search_screen.dart';
 import 'package:melody/screens/library_screen.dart';
 import 'package:melody/screens/premium_screen.dart';
+import 'package:get/get.dart';
 
 class BottomPlayerNav extends StatelessWidget {
   final int currentIndex;
   final bool isPlaying;
-  final String? currentSongTitle;
-  final String? currentArtist;
-  final String? currentImageUrl;
+  final String? songTitle;
+  final String? artistName;
+  final String? imageUrl;
+  final String? youtubeId;
   final VoidCallback? onPlayPause;
   final VoidCallback? onTapPlayer;
 
@@ -18,9 +20,10 @@ class BottomPlayerNav extends StatelessWidget {
     Key? key,
     required this.currentIndex,
     this.isPlaying = false,
-    this.currentSongTitle,
-    this.currentArtist,
-    this.currentImageUrl,
+    this.songTitle,
+    this.artistName,
+    this.imageUrl,
+    this.youtubeId,
     this.onPlayPause,
     this.onTapPlayer,
   }) : super(key: key);
@@ -31,22 +34,23 @@ class BottomPlayerNav extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         // Mini Player
-        if (currentSongTitle != null)
+        if (songTitle != null)
           GestureDetector(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => PlayerScreen(
-                  songTitle: currentSongTitle,
-                  artistName: currentArtist,
-                  imageUrl: currentImageUrl,
-                  isPlaying: isPlaying,
-                  onPlayPause: onPlayPause,
-                ),
-              ),
-            ),
+            onTap: () {
+              if (songTitle != null &&
+                  artistName != null &&
+                  imageUrl != null &&
+                  youtubeId != null) {
+                Get.to(() => PlayerScreen(
+                      title: songTitle!,
+                      artist: artistName!,
+                      imageUrl: imageUrl!,
+                      youtubeId: youtubeId!,
+                    ));
+              }
+            },
             child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.grey[900],
                 border: Border(
@@ -61,15 +65,32 @@ class BottomPlayerNav extends StatelessWidget {
                   // Album Art
                   ClipRRect(
                     borderRadius: BorderRadius.circular(4),
-                    child: Image.asset(
-                      currentImageUrl ?? 'assets/playlist1.png',
-                      width: 40,
-                      height: 40,
-                      fit: BoxFit.cover,
-                    ),
+                    child: imageUrl != null
+                        ? Image.network(
+                            imageUrl!,
+                            width: 40,
+                            height: 40,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                width: 40,
+                                height: 40,
+                                color: Colors.grey[800],
+                                child: const Icon(Icons.music_note,
+                                    color: Colors.white),
+                              );
+                            },
+                          )
+                        : Container(
+                            width: 40,
+                            height: 40,
+                            color: Colors.grey[800],
+                            child: const Icon(Icons.music_note,
+                                color: Colors.white),
+                          ),
                   ),
-                  SizedBox(width: 12),
-                  
+                  const SizedBox(width: 12),
+
                   // Song Info
                   Expanded(
                     child: Column(
@@ -77,8 +98,8 @@ class BottomPlayerNav extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          currentSongTitle ?? 'No song playing',
-                          style: TextStyle(
+                          songTitle ?? 'No song playing',
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
@@ -87,7 +108,7 @@ class BottomPlayerNav extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text(
-                          currentArtist ?? 'Unknown artist',
+                          artistName ?? 'Unknown artist',
                           style: TextStyle(
                             color: Colors.grey[400],
                             fontSize: 12,
@@ -98,7 +119,7 @@ class BottomPlayerNav extends StatelessWidget {
                       ],
                     ),
                   ),
-                  
+
                   // Play/Pause Button
                   IconButton(
                     icon: Icon(
@@ -119,7 +140,7 @@ class BottomPlayerNav extends StatelessWidget {
             color: Colors.black.withOpacity(0.5),
             borderRadius: BorderRadius.circular(25),
           ),
-          margin: EdgeInsets.all(16),
+          margin: const EdgeInsets.all(16),
           child: Theme(
             data: Theme.of(context).copyWith(
               canvasColor: Colors.transparent,
@@ -131,7 +152,7 @@ class BottomPlayerNav extends StatelessWidget {
               unselectedItemColor: Colors.grey,
               type: BottomNavigationBarType.fixed,
               currentIndex: currentIndex,
-              items: [
+              items: const [
                 BottomNavigationBarItem(
                   icon: Icon(Icons.home, size: 28),
                   label: 'Home',
@@ -161,28 +182,12 @@ class BottomPlayerNav extends StatelessWidget {
     if (index == currentIndex) return;
 
     final screens = [
-      HomeScreen(),
+      const HomeScreen(),
       SearchScreen(),
       LibraryScreen(),
-      PremiumScreen(),
+      const PremiumScreen(),
     ];
 
-    Navigator.pushReplacement(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => screens[index],
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          var begin = Offset(index > currentIndex ? 1.0 : -1.0, 0.0);
-          var end = Offset.zero;
-          var curve = Curves.easeInOut;
-          var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-          return SlideTransition(
-            position: animation.drive(tween),
-            child: child,
-          );
-        },
-        transitionDuration: Duration(milliseconds: 300),
-      ),
-    );
+    Get.to(() => screens[index], preventDuplicates: false);
   }
-} 
+}

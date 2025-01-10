@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:melody/screens/player_screen.dart';
 
 class MiniPlayer extends StatelessWidget {
-  final String? songTitle;
-  final String? artistName;
+  final String? title;
+  final String? artist;
   final String? imageUrl;
+  final String? youtubeId;
   final bool isPlaying;
   final VoidCallback? onPlayPause;
 
   const MiniPlayer({
     Key? key,
-    this.songTitle,
-    this.artistName,
+    this.title,
+    this.artist,
     this.imageUrl,
+    this.youtubeId,
     this.isPlaying = false,
     this.onPlayPause,
   }) : super(key: key);
@@ -20,18 +23,19 @@ class MiniPlayer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => PlayerScreen(
-            songTitle: songTitle,
-            artistName: artistName,
-            imageUrl: imageUrl,
-            isPlaying: isPlaying,
-            onPlayPause: onPlayPause,
-          ),
-        ),
-      ),
+      onTap: () {
+        if (title != null &&
+            artist != null &&
+            imageUrl != null &&
+            youtubeId != null) {
+          Get.to(() => PlayerScreen(
+                title: title!,
+                artist: artist!,
+                imageUrl: imageUrl!,
+                youtubeId: youtubeId!,
+              ));
+        }
+      },
       child: Container(
         decoration: BoxDecoration(
           color: Colors.grey[900],
@@ -42,21 +46,37 @@ class MiniPlayer extends StatelessWidget {
             ),
           ),
         ),
-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
             // Album Art
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
-              child: Image.asset(
-                imageUrl ?? 'assets/playlist1.png',
-                width: 40,
-                height: 40,
-                fit: BoxFit.cover,
-              ),
+              child: imageUrl != null
+                  ? Image.network(
+                      imageUrl!,
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          width: 40,
+                          height: 40,
+                          color: Colors.grey[800],
+                          child:
+                              const Icon(Icons.music_note, color: Colors.white),
+                        );
+                      },
+                    )
+                  : Container(
+                      width: 40,
+                      height: 40,
+                      color: Colors.grey[800],
+                      child: const Icon(Icons.music_note, color: Colors.white),
+                    ),
             ),
-            SizedBox(width: 12),
-            
+            const SizedBox(width: 12),
+
             // Song Info
             Expanded(
               child: Column(
@@ -64,8 +84,8 @@ class MiniPlayer extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    songTitle ?? 'No song playing',
-                    style: TextStyle(
+                    title ?? 'No song playing',
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
@@ -74,7 +94,7 @@ class MiniPlayer extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    artistName ?? 'Unknown artist',
+                    artist ?? 'Unknown artist',
                     style: TextStyle(
                       color: Colors.grey[400],
                       fontSize: 12,
@@ -85,7 +105,7 @@ class MiniPlayer extends StatelessWidget {
                 ],
               ),
             ),
-            
+
             // Controls
             Row(
               mainAxisSize: MainAxisSize.min,
@@ -105,4 +125,4 @@ class MiniPlayer extends StatelessWidget {
       ),
     );
   }
-} 
+}

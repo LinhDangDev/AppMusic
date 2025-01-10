@@ -5,6 +5,8 @@ import 'package:melody/services/music_service.dart';
 import 'package:melody/models/music.dart';
 import 'package:melody/models/search_result.dart';
 import 'dart:async';
+import 'package:get/get.dart';
+import 'package:melody/screens/player_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   @override
@@ -116,7 +118,12 @@ class _SearchScreenState extends State<SearchScreen> {
                     return SearchResultItem(
                       result: result,
                       onTap: () {
-                        print('Selected: ${result.title} by ${result.artistName}');
+                        Get.to(() => PlayerScreen(
+                          title: result.title,
+                          artist: result.artistName,
+                          imageUrl: result.displayImage,
+                          youtubeId: result.youtubeId,
+                        ));
                       },
                     );
                   },

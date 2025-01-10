@@ -4,38 +4,33 @@ import 'package:melody/models/genre.dart';
 import 'package:melody/models/search_result.dart';
 
 class MusicService {
-  final String baseUrl = 'http://192.168.102.4:3000';
-  // final String baseUrl = 'http://192.168.1.xxx:3000';
   final Dio _dio = Dio();
-
-  MusicService() {
-    _dio.interceptors.add(LogInterceptor(
-      requestBody: true,
-      responseBody: true,
-      logPrint: (obj) => print('Dio Log: $obj'),
-    ));
-  }
+  final String baseUrl = 'http://192.168.102.4:3000';
 
   Future<List<Music>> getAllMusic() async {
     try {
       final response = await _dio.get('$baseUrl/api/music');
-      final Map<String, dynamic> responseData = response.data;
-      final List<dynamic> items = responseData['data']['items'] ?? [];
-      return items.map((item) => Music.fromJson(item)).toList();
+      if (response.data['status'] == 'success') {
+        final items = response.data['data']['items'] as List;
+        return items.map((item) => Music.fromJson(item)).toList();
+      }
+      return [];
     } catch (e) {
-      print('Get All Music Error: $e');
+      print('Error getting all music: $e');
       return [];
     }
   }
 
-  Future<List<Music>> getMusicRankings(String country) async {
+  Future<List<Music>> getMusicRankings(String region) async {
     try {
-      final response = await _dio.get('$baseUrl/api/music/rankings/$country');
-      final Map<String, dynamic> responseData = response.data;
-      final List<dynamic> items = responseData['data']['rankings'] ?? [];
-      return items.map((item) => Music.fromJson(item)).toList();
+      final response = await _dio.get('$baseUrl/api/music/rankings/$region');
+      if (response.data['status'] == 'success') {
+        final rankings = response.data['data']['rankings'] as List;
+        return rankings.map((item) => Music.fromJson(item)).toList();
+      }
+      return [];
     } catch (e) {
-      print('Get Music Rankings Error: $e');
+      print('Error getting rankings: $e');
       return [];
     }
   }

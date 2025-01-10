@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'dart:ui';
+import 'package:get/get.dart';
 import 'player_screen.dart';
 import 'search_screen.dart';
 import 'library_screen.dart';
@@ -11,143 +12,136 @@ import 'package:melody/models/genre.dart';
 import 'package:melody/widgets/genre_card.dart';
 import 'package:melody/models/music.dart';
 import 'package:melody/services/music_service.dart';
+import 'package:melody/provider/music_controller.dart';
 
-class HomeScreen extends StatefulWidget {
-  @override
-  _HomeScreenState createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  final ScrollController _scrollController = ScrollController();
-  double _scrollOpacity = 0.0;
-  bool _isLoading = true;
-  final MusicService _musicService = MusicService();
-  List<Music> _allMusic = [];
-  List<Music> _rankings = [];
-  List<Genre> _genres = [];
+class HomeScreen extends GetView<MusicController> {
+  const HomeScreen({Key? key}) : super(key: key);
 
   @override
-  void initState() {
-    super.initState();
-    _scrollController.addListener(_onScroll);
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
-    try {
-      final allMusic = await _musicService.getAllMusic();
-      final rankings = await _musicService.getMusicRankings('VN');
-      final genres = await _musicService.getAllGenres();
-
-      setState(() {
-        _allMusic = allMusic;
-        _rankings = rankings;
-        _genres = genres;
-        _isLoading = false;
-      });
-    } catch (e) {
-      print('Load data error: $e');
-      setState(() => _isLoading = false);
-    }
-  }
-
-  void _onScroll() {
-    final offset = _scrollController.offset;
-    final opacity = (offset / 350).clamp(0.0, 1.0);
-    setState(() {
-      _scrollOpacity = opacity;
-    });
-  }
-
-  void _showSettingsDrawer() {
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: '',
-      transitionDuration: Duration(milliseconds: 200),
-      pageBuilder: (context, animation1, animation2) {
-        return Align(
-          alignment: Alignment.centerLeft,
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              width: MediaQuery.of(context).size.width * 0.85,
-              height: MediaQuery.of(context).size.height,
-              decoration: BoxDecoration(
-                color: Color(0xFF282828),
-              ),
-              child: SafeArea(
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildUserProfileSection(),
-                      _buildMenuItems(),
-                      SizedBox(height: 32),
-                      _buildNotificationsSection(),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        var begin = Offset(-1.0, 0.0);
-        var end = Offset.zero;
-        var curve = Curves.easeInOut;
-        var tween =
-            Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-        return SlideTransition(
-          position: animation.drive(tween),
-          child: child,
-        );
-      },
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Obx(() => controller.isLoading.value
+          ? const Center(child: CircularProgressIndicator())
+          : _buildContent(context)),
     );
   }
 
-  Widget _buildUserProfileSection() {
+  Widget _buildContent(BuildContext context) {
     return Container(
-      padding: EdgeInsets.all(16),
-      child: Row(
+      decoration: BoxDecoration(
+        gradient: AppColors.backgroundGradient,
+      ),
+      child: Stack(
         children: [
-          CircleAvatar(
-            backgroundColor: Colors.blue,
-            radius: 30,
-            child: Text(
-              'S',
-              style: TextStyle(
-                fontSize: 24,
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
+          SafeArea(
+            child: CustomScrollView(
+              slivers: [
+                _buildSliverAppBar(context),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.only(
+                      left: 16.0,
+                      right: 16.0,
+                      top: 16.0,
+                      bottom: 140.0,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 10),
+                        _buildRecentlyPlayed(),
+                        const SizedBox(height: 15),
+                        _buildPlaylists(context),
+                        const SizedBox(height: 32),
+                        _buildBiggestHits(context),
+                        const SizedBox(height: 32),
+                        _buildGenres(),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Suchir',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                '0 Followers • 84 Following',
-                style: TextStyle(
-                  color: Colors.grey[400],
-                  fontSize: 12,
-                ),
-              ),
-            ],
+          const Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: BottomPlayerNav(currentIndex: 0),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSliverAppBar(BuildContext context) {
+    return SliverAppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      title: const Text(
+        'Good afternoon',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.notifications_none, color: Colors.white),
+          onPressed: () {},
+        ),
+        IconButton(
+          icon: const Icon(Icons.settings, color: Colors.white),
+          onPressed: () => _showSettingsDrawer(context),
+        ),
+        const SizedBox(width: 8),
+      ],
+    );
+  }
+
+  void _showSettingsDrawer(BuildContext context) {
+    Get.dialog(
+      Align(
+        alignment: Alignment.centerRight,
+        child: Container(
+          width: Get.width * 0.85,
+          height: Get.height,
+          color: Colors.black87,
+          child: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Settings',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Get.back(),
+                      ),
+                    ],
+                  ),
+                ),
+                _buildMenuItems(),
+                const Spacer(),
+                _buildNotificationsSection(),
+              ],
+            ),
+          ),
+        ),
+      ),
+      barrierDismissible: true,
+      barrierColor: Colors.black54,
     );
   }
 
@@ -165,37 +159,41 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildMenuItem(IconData icon, String title, {Function()? onTap}) {
     return ListTile(
       leading: Container(
-        padding: EdgeInsets.all(8),
+        padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: Colors.grey[900],
           borderRadius: BorderRadius.circular(15),
         ),
         child: Icon(icon, color: Colors.white),
       ),
-      title: Text(title, style: TextStyle(color: Colors.white)),
-      onTap: onTap ?? () => Navigator.pop(context),
+      title: Text(
+        title,
+        style: const TextStyle(color: Colors.white),
+      ),
+      onTap: onTap ?? () => Get.back(),
     );
   }
 
   Widget _buildNotificationsSection() {
     return Padding(
-      padding: EdgeInsets.all(8),
+      padding: const EdgeInsets.all(8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue,
-                padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                 ),
               ),
               onPressed: () {},
-              child: Text(
+              child: const Text(
                 'Upgrade to Premium',
                 style: TextStyle(
                   color: Colors.white,
@@ -210,296 +208,136 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: AppColors.backgroundGradient,
+  Widget _buildPlaylists(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Get You Started',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
         ),
-        child: Stack(
-          children: [
-            SafeArea(
-              child: CustomScrollView(
-                controller: _scrollController,
-                slivers: [
-                  _buildSliverAppBar(),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.only(
-                        left: 16.0,
-                        right: 16.0,
-                        top: 16.0,
-                        bottom: 140.0,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // SectionTitle('Recently played'),
-                          SizedBox(height: 10),
-                          _buildRecentlyPlayed(),
-                          // SectionTitle('To get you started'),
-                          SizedBox(height: 15),
-                          _buildPlaylists(),
-                          SizedBox(height: 32),
-                          // SectionTitle("Today's Biggest Hits"),
-                          SizedBox(height: 15),
-                          _buildBiggestHits(),
-                          SizedBox(height: 32),
-                          _buildGenres(),
-                        ],
-                      ),
-                    ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 200,
+          child: Obx(() {
+            return ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: controller.allMusic.length,
+              itemBuilder: (context, index) {
+                final music = controller.allMusic[index];
+                return Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: MusicCard(
+                    imageUrl: music.displayImage,
+                    title: music.title,
+                    subtitle: music.artistName,
+                    youtubeId: music.youtubeId,
                   ),
-                ],
-              ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: BottomPlayerNav(currentIndex: 0),
-            ),
-          ],
+                );
+              },
+            );
+          }),
         ),
-      ),
-    );
-  }
-
-  Widget _buildSliverAppBar() {
-    return SliverAppBar(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      title: Text(
-        'Good afternoon',
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 24,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      actions: [
-        IconButton(
-          icon: Icon(Icons.notifications_none, color: Colors.white),
-          onPressed: () {},
-        ),
-        IconButton(
-          icon: Icon(Icons.settings, color: Colors.white),
-          onPressed: _showSettingsDrawer,
-        ),
-        SizedBox(width: 8),
       ],
     );
   }
 
   Widget _buildRecentlyPlayed() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          _buildRecentlyPlayedCard(),
-          _buildRecentlyPlayedCard(),
-          _buildRecentlyPlayedCard(),
-          _buildRecentlyPlayedCard(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRecentlyPlayedCard() {
-    return Container(
-      width: 120,
-      margin: EdgeInsets.only(right: 10),
-      decoration: BoxDecoration(
-        color: Color(0xFF282828),
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            offset: Offset(0, 4),
-            blurRadius: 12,
-            spreadRadius: 1,
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: () {},
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Image.asset(
-                  'assets/playlist1.png',
-                  width: double.infinity,
-                  height: 120,
-                  fit: BoxFit.cover,
-                ),
-              ),
-              Container(
-                padding: EdgeInsets.all(8),
-                child: Text(
-                  'Mega Hit Mix',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPlaylists() {
-    if (_isLoading) {
-      return Center(child: CircularProgressIndicator());
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16),
-          child: Text(
-            'Get You Started',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
+        const Text(
+          'Recently played',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
           ),
         ),
-        SizedBox(height: 16),
+        const SizedBox(height: 16),
         SizedBox(
           height: 200,
-          child: ListView.builder(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            scrollDirection: Axis.horizontal,
-            itemCount: _allMusic.length,
-            itemBuilder: (context, index) {
-              final music = _allMusic[index];
-              return Padding(
-                padding: EdgeInsets.only(right: 16),
-                child: MusicCard(
-                  imageUrl: music.displayImage,
-                  title: music.title,
-                  subtitle: music.artistName,
-                ),
-              );
-            },
-          ),
+          child: Obx(() => ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: controller.rankings.length,
+                itemBuilder: (context, index) {
+                  final music = controller.rankings[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 16),
+                    child: MusicCard(
+                      imageUrl: music.displayImage,
+                      title: music.title,
+                      subtitle: music.artistName,
+                      youtubeId: music.youtubeId,
+                    ),
+                  );
+                },
+              )),
         ),
       ],
     );
   }
 
-  Widget _buildBiggestHits() {
-    if (_isLoading) {
-      return Center(child: CircularProgressIndicator());
-    }
-
+  Widget _buildBiggestHits(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16),
-          child: Text(
-            'Today\'s Biggest Hits',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
+        const Text(
+          'Biggest Hits',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
           ),
         ),
-        SizedBox(height: 16),
+        const SizedBox(height: 16),
         SizedBox(
           height: 200,
-          child: ListView.builder(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            scrollDirection: Axis.horizontal,
-            itemCount: _rankings.length,
-            itemBuilder: (context, index) {
-              final music = _rankings[index];
-              return Padding(
-                padding: EdgeInsets.only(right: 16),
-                child: MusicCard(
-                  imageUrl: music.displayImage,
-                  title: music.title,
-                  subtitle: music.artistName,
-                ),
-              );
-            },
-          ),
+          child: Obx(() => ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: controller.allMusic.length,
+                itemBuilder: (context, index) {
+                  final music = controller.allMusic[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 16),
+                    child: MusicCard(
+                      imageUrl: music.displayImage,
+                      title: music.title,
+                      subtitle: music.artistName,
+                      youtubeId: music.youtubeId,
+                    ),
+                  );
+                },
+              )),
         ),
       ],
     );
   }
 
   Widget _buildGenres() {
-    if (_isLoading) {
-      return Center(child: CircularProgressIndicator());
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Moods & genres',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            TextButton(
-              onPressed: () {},
-              child: Text(
-                'More',
-                style: TextStyle(
-                  color: Colors.grey,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: 16),
-        SizedBox(
-          height: 152,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (var i = 0; i < _genres.length; i += 2)
-                  if (i + 1 < _genres.length)
-                    Container(
-                      margin: EdgeInsets.only(right: 8),
-                      child: Column(
-                        children: [
-                          GenreCard(genre: _genres[i]),
-                          SizedBox(height: 8),
-                          if (i + 1 < _genres.length)
-                            GenreCard(genre: _genres[i + 1]),
-                        ],
-                      ),
-                    ),
-              ],
-            ),
+        const Text(
+          'Browse genres',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
           ),
         ),
+        const SizedBox(height: 16),
+        Obx(() => Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: controller.genres
+                  .map((genre) => GenreCard(genre: genre))
+                  .toList(),
+            )),
       ],
     );
   }
@@ -530,19 +368,26 @@ class MusicCard extends StatelessWidget {
   final String imageUrl;
   final String title;
   final String subtitle;
+  final String youtubeId;
 
   const MusicCard({
     Key? key,
     required this.imageUrl,
     required this.title,
     required this.subtitle,
+    required this.youtubeId,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        // Handle tap
+        Get.to(() => PlayerScreen(
+              title: title,
+              artist: subtitle,
+              imageUrl: imageUrl,
+              youtubeId: youtubeId,
+            ));
       },
       child: Container(
         width: 150,
