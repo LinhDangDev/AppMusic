@@ -1,12 +1,11 @@
 import db from '../model/db.js';
 import { createError } from '../utils/error.js';
-import admin from '../config/firebase.js';
 
 class UserService {
   async getUserById(uid) {
     try {
       const [rows] = await db.execute(
-        'SELECT id, name, email, avatar, created_at FROM Users WHERE firebase_uid = ?',
+        'SELECT id, name, email, avatar, created_at FROM Users WHERE id = ?',
         [uid]
       );
       return rows[0];
@@ -19,27 +18,13 @@ class UserService {
   async updateUser(uid, { name, avatar }) {
     try {
       await db.execute(
-        'UPDATE Users SET name = ?, avatar = ? WHERE firebase_uid = ?',
+        'UPDATE Users SET name = ?, avatar = ? WHERE id = ?',
         [name, avatar, uid]
       );
       return this.getUserById(uid);
     } catch (error) {
       console.error('Error updating user:', error);
       throw error;
-    }
-  }
-
-  async changePassword(uid, currentPassword, newPassword) {
-    try {
-      // Xác thực mật khẩu hiện tại thông qua Firebase
-      const user = await admin.auth().getUser(uid);
-      // Cập nhật mật khẩu mới
-      await admin.auth().updateUser(uid, {
-        password: newPassword
-      });
-    } catch (error) {
-      console.error('Error changing password:', error);
-      throw createError('Failed to change password', 400);
     }
   }
 
@@ -55,8 +40,7 @@ class UserService {
         FROM Play_History ph
         JOIN Music m ON ph.music_id = m.id
         JOIN Artists a ON m.artist_id = a.id
-        JOIN Users u ON ph.user_id = u.id
-        WHERE u.firebase_uid = ?
+        WHERE ph.user_id = ?
         ORDER BY ph.played_at DESC
         LIMIT 50
       `, [uid]);
@@ -79,8 +63,7 @@ class UserService {
         FROM Favorites f
         JOIN Music m ON f.music_id = m.id
         JOIN Artists a ON m.artist_id = a.id
-        JOIN Users u ON f.user_id = u.id
-        WHERE u.firebase_uid = ?
+        WHERE f.user_id = ?
         ORDER BY f.created_at DESC
       `, [uid]);
       return rows;
@@ -92,14 +75,9 @@ class UserService {
 
   async addToFavorites(uid, musicId) {
     try {
-      const [user] = await db.execute('SELECT id FROM Users WHERE firebase_uid = ?', [uid]);
-      if (!user.length) {
-        throw createError('User not found', 404);
-      }
-
       await db.execute(
         'INSERT INTO Favorites (user_id, music_id) VALUES (?, ?)',
-        [user[0].id, musicId]
+        [uid, musicId]
       );
     } catch (error) {
       if (error.code === 'ER_DUP_ENTRY') {
@@ -112,30 +90,12 @@ class UserService {
 
   async removeFromFavorites(uid, musicId) {
     try {
-      const [user] = await db.execute('SELECT id FROM Users WHERE firebase_uid = ?', [uid]);
-      if (!user.length) {
-        throw createError('User not found', 404);
-      }
-
       await db.execute(
         'DELETE FROM Favorites WHERE user_id = ? AND music_id = ?',
-        [user[0].id, musicId]
+        [uid, musicId]
       );
     } catch (error) {
       console.error('Error removing from favorites:', error);
-      throw error;
-    }
-  }
-
-  async createUser({ firebase_uid, email, name }) {
-    try {
-      const [result] = await db.execute(
-        'INSERT INTO Users (firebase_uid, email, name) VALUES (?, ?, ?)',
-        [firebase_uid, email, name]
-      );
-      return result.insertId;
-    } catch (error) {
-      console.error('Error creating user in database:', error);
       throw error;
     }
   }

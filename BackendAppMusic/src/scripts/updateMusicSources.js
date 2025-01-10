@@ -1,34 +1,29 @@
-import { google } from 'googleapis';
+import YouTube from 'youtube-sr';
 import db from '../model/db.js';
 
-const youtube = google.youtube({
-  version: 'v3',
-  auth: process.env.YOUTUBE_API_KEY
-});
-
-const BATCH_SIZE = 100;
+const BATCH_SIZE = 50;
 
 async function searchYouTubeVideo(query) {
   try {
-    const response = await youtube.search.list({
-      part: ['snippet'],
-      q: query,
-      type: ['video'],
-      videoCategoryId: '10',
-      maxResults: 1
+    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+    
+    const videos = await YouTube.default.search(query, {
+      limit: 1,
+      type: 'video',
+      safeSearch: true
     });
 
-    if (response.data.items && response.data.items.length > 0) {
-      const video = response.data.items[0];
+    if (videos && videos.length > 0) {
+      const video = videos[0];
       return {
-        videoId: video.id.videoId,
-        videoUrl: `https://www.youtube.com/watch?v=${video.id.videoId}`,
-        thumbnailUrl: video.snippet.thumbnails.high.url
+        videoId: video.id,
+        videoUrl: `https://www.youtube.com/watch?v=${video.id}`,
+        thumbnailUrl: video.thumbnail?.url || video.thumbnails[0]?.url
       };
     }
     return null;
   } catch (error) {
-    console.error('YouTube API Error:', error.message);
+    console.error('YouTube search error:', error.message);
     return null;
   }
 }

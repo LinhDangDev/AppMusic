@@ -1,17 +1,21 @@
 import musicService from '../services/musicService.js';
-import { createError } from '../utils/error.js';
+import syncService from '../services/syncService.js';
+import rankingService from '../services/rankingService.js';
 
 class MusicController {
-  async searchMusic(req, res, next) {
+  async getAllMusic(req, res, next) {
     try {
-      const { q } = req.query;
-      if (!q) {
-        throw createError('Search query is required', 400);
-      }
-      const results = await musicService.searchMusic(q);
+      const { limit = 20, offset = 0, sort = 'newest' } = req.query;
+      const result = await musicService.getAllMusic(
+        parseInt(limit),
+        parseInt(offset),
+        sort
+      );
+
       res.json({
-        status: 'success',
-        data: results
+        success: true,
+        data: result.items,
+        pagination: result.pagination
       });
     } catch (error) {
       next(error);
@@ -21,71 +25,131 @@ class MusicController {
   async getMusicById(req, res, next) {
     try {
       const music = await musicService.getMusicById(req.params.id);
-      res.json({
-        status: 'success',
-        data: music
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  async getStreamUrl(req, res, next) {
-    try {
-      const { id } = req.params;
-      const music = await musicService.getMusicById(id);
-      
       if (!music) {
-        throw createError('Music not found', 404);
+        return res.status(404).json({
+          success: false,
+          message: 'Music not found'
+        });
       }
+      res.json({ success: true, data: music });
+    } catch (error) {
+      next(error);
+    }
+  }
 
-      // Nếu chưa có source, tự động tìm và thêm
-      if (!music.source || music.source === 'itunes') {
-        try {
-          await musicService.searchAndAddYoutubeSource(
-            music.id,
-            music.title,
-            music.artist_name
-          );
-          // Lấy lại thông tin music sau khi cập nhật
-          music = await musicService.getMusicById(id);
-        } catch (error) {
-          console.error('Failed to add YouTube source:', error);
-          // Fallback to preview URL if YouTube source not found
-          return res.json({
-            status: 'success',
-            data: { streamUrl: music.preview_url }
-          });
-        }
-      }
-
-      const streamUrl = await musicService.generateStreamUrl(music);
+  async searchMusic(req, res, next) {
+    try {
+      const { q, limit = 20 } = req.query;
       
+      if (!q) {
+        return res.status(400).json({
+          success: false,
+          message: 'Search query is required'
+        });
+      }
+
+      // Tìm kiếm tổng hợp
+      const results = await musicService.searchAll(q.trim(), parseInt(limit));
+
       res.json({
-        status: 'success',
-        data: { streamUrl }
+        success: true,
+        data: results,
+        total: results.length,
+        message: results.length > 0 ? 
+          `Found ${results.length} results` : 
+          'No results found'
+      });
+
+    } catch (error) {
+      console.error('Search error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error searching music'
+      });
+    }
+  }
+
+  async getTopMusic(req, res, next) {
+    try {
+      const { limit } = req.query;
+      const music = await musicService.getTopMusic(parseInt(limit) || 10);
+      res.json({ success: true, data: music });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async syncITunes(req, res, next) {
+    try {
+      await syncService.syncITunesMusic();
+      res.json({
+        success: true,
+        message: 'iTunes sync completed and YouTube URLs update started'
       });
     } catch (error) {
       next(error);
     }
   }
 
-  async recordPlay(req, res, next) {
+  async triggerSync(req, res, next) {
     try {
-      await musicService.recordPlay(req.params.id, req.user.uid);
-      res.status(204).send();
+      // Chạy sync trong background
+      syncService.syncITunesMusic()
+        .then(() => console.log('Manual sync completed'))
+        .catch(error => console.error('Manual sync failed:', error));
+      
+      res.json({
+        success: true,
+        message: 'Sync process started in background'
+      });
     } catch (error) {
       next(error);
     }
   }
 
-  async getTopSongs(req, res, next) {
+  // Thêm API riêng cho YouTube search
+  async searchYouTube(req, res, next) {
     try {
-      const { limit = 10 } = req.query;
-      const songs = await musicService.getTopSongs(parseInt(limit));
+      const { q, limit = 10 } = req.query;
+      
+      if (!q) {
+        return res.status(400).json({
+          success: false,
+          message: 'Search query is required'
+        });
+      }
+
+      const results = await musicService.searchYouTube(q.trim(), parseInt(limit));
+
       res.json({
-        status: 'success',
-        data: songs
+        success: true,
+        data: results,
+        total: results.length,
+        message: `Found ${results.length} YouTube results`
+      });
+
+    } catch (error) {
+      console.error('YouTube search error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error searching YouTube'
+      });
+    }
+  }
+
+  async getRankings(req, res, next) {
+    try {
+      const { region } = req.params;
+      const { limit = 100 } = req.query;
+      
+      const rankings = await rankingService.getTopSongs(
+        region.toUpperCase(),
+        parseInt(limit)
+      );
+      
+      res.json({
+        success: true,
+        data: rankings
       });
     } catch (error) {
       next(error);

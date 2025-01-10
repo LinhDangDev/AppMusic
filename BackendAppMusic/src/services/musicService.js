@@ -1,184 +1,237 @@
 import db from '../model/db.js';
-import ytdl from 'ytdl-core';
-import { createError } from '../utils/error.js';
+import YouTube from 'youtube-sr';
 
 class MusicService {
-  async searchMusic(query) {
+  // Thêm method getAllMusic
+  async getAllMusic(limit = 20, offset = 0, sort = 'newest') {
     try {
-      // Tìm trong database trước
-      const [dbResults] = await db.execute(`
+      // Convert limit và offset sang số nguyên
+      const limitNum = parseInt(limit);
+      const offsetNum = parseInt(offset);
+
+      let orderBy;
+      switch (sort) {
+        case 'popular':
+          orderBy = 'm.play_count DESC';
+          break;
+        case 'newest':
+          orderBy = 'm.created_at DESC';
+          break;
+        default:
+          orderBy = 'm.created_at DESC';
+      }
+
+      // Sử dụng query với tham số đã được convert
+      const [rows] = await db.execute(`
         SELECT 
-          m.id,
-          m.title,
-          m.image_url,
-          m.preview_url,
+          m.*,
           a.name as artist_name,
-          a.id as artist_id
+          a.image_url as artist_image,
+          (SELECT COUNT(*) FROM Favorites f WHERE f.music_id = m.id) as favorite_count,
+          GROUP_CONCAT(DISTINCT g.name) as genres
         FROM Music m
-        JOIN Artists a ON m.artist_id = a.id
-        WHERE m.title LIKE ? OR a.name LIKE ?
-        LIMIT 10
-      `, [`%${query}%`, `%${query}%`]);
-      
-      // Tìm trên YouTube
-      const ytResults = await this.searchYouTube(query);
-      
-      // Kết hợp kết quả
+        LEFT JOIN Artists a ON m.artist_id = a.id
+        LEFT JOIN Music_Genres mg ON m.id = mg.music_id
+        LEFT JOIN Genres g ON mg.genre_id = g.id
+        GROUP BY m.id
+        ORDER BY ${orderBy}
+        LIMIT ?, ?
+      `, [offsetNum, limitNum]);
+
+      // Đếm tổng số bài hát
+      const [totalRows] = await db.execute('SELECT COUNT(*) as total FROM Music');
+
+      // Format lại genres cho mỗi bài hát
+      const formattedRows = rows.map(row => ({
+        ...row,
+        genres: row.genres ? row.genres.split(',') : []
+      }));
+
       return {
-        database: dbResults,
-        youtube: ytResults
+        items: formattedRows,
+        pagination: {
+          total: totalRows[0].total,
+          limit: limitNum,
+          offset: offsetNum,
+          hasMore: offsetNum + limitNum < totalRows[0].total
+        }
       };
     } catch (error) {
-      console.error('Error searching music:', error);
+      console.error('Error getting all music:', error);
       throw error;
     }
   }
 
-  async searchYouTube(query) {
-    try {
-      const searchResults = await ytdl.search(query, { limit: 5 });
-      return searchResults.map(video => ({
-        id: video.id,
-        title: video.title,
-        thumbnail: `https://img.youtube.com/vi/${video.id}/maxresdefault.jpg`,
-        duration: video.duration,
-        author: video.author.name,
-        url: `https://www.youtube.com/watch?v=${video.id}`
-      }));
-    } catch (error) {
-      console.error('YouTube search error:', error);
-      return [];
-    }
-  }
-
+  // Thêm method getMusicById
   async getMusicById(id) {
     try {
       const [rows] = await db.execute(`
         SELECT 
           m.*,
           a.name as artist_name,
-          a.id as artist_id
+          a.image_url as artist_image,
+          (SELECT COUNT(*) FROM Favorites f WHERE f.music_id = m.id) as favorite_count,
+          GROUP_CONCAT(DISTINCT g.name) as genres
         FROM Music m
-        JOIN Artists a ON m.artist_id = a.id
+        LEFT JOIN Artists a ON m.artist_id = a.id
+        LEFT JOIN Music_Genres mg ON m.id = mg.music_id
+        LEFT JOIN Genres g ON mg.genre_id = g.id
         WHERE m.id = ?
+        GROUP BY m.id
       `, [id]);
 
-      if (!rows.length) {
-        throw createError('Music not found', 404);
+      if (rows.length === 0) {
+        return null;
       }
 
-      return rows[0];
+      // Format lại genres
+      const music = rows[0];
+      music.genres = music.genres ? music.genres.split(',') : [];
+      
+      return music;
     } catch (error) {
       console.error('Error getting music by id:', error);
       throw error;
     }
   }
 
-  async getStreamUrl(videoId) {
+  // Search trong database
+  async searchDatabase(query, limit = 20, offset = 0) {
     try {
-      const info = await ytdl.getInfo(videoId);
-      const format = ytdl.chooseFormat(info.formats, { quality: 'highestaudio' });
-      return format.url;
-    } catch (error) {
-      console.error('Error getting stream URL:', error);
-      throw createError('Failed to get stream URL', 500);
-    }
-  }
-
-  async recordPlay(musicId, userId) {
-    try {
-      await db.execute(
-        'INSERT INTO Play_History (music_id, user_id, played_at) VALUES (?, ?, NOW())',
-        [musicId, userId]
-      );
-    } catch (error) {
-      console.error('Error recording play:', error);
-      // Không throw error vì đây không phải lỗi nghiêm trọng
-    }
-  }
-
-  async getTopSongs(limit = 10) {
-    try {
-      const [rows] = await db.execute(`
-        SELECT 
-          m.id,
-          m.title,
-          m.image_url,
+      const searchQuery = `%${query}%`;
+      const [rows] = await db.query(
+        `SELECT 
+          m.*,
           a.name as artist_name,
-          COUNT(ph.id) as play_count
+          a.image_url as artist_image,
+          (SELECT COUNT(*) FROM Favorites f WHERE f.music_id = m.id) as favorite_count,
+          m.play_count,
+          m.youtube_url,
+          m.youtube_thumbnail
         FROM Music m
-        LEFT JOIN Play_History ph ON m.id = ph.music_id
-        JOIN Artists a ON m.artist_id = a.id
-        GROUP BY m.id
-        ORDER BY play_count DESC
-        LIMIT ?
-      `, [limit]);
-      
+        LEFT JOIN Artists a ON m.artist_id = a.id
+        WHERE m.title LIKE ? OR a.name LIKE ?
+        ORDER BY m.play_count DESC
+        LIMIT ?`,
+        [searchQuery, searchQuery, limit]
+      );
       return rows;
     } catch (error) {
-      console.error('Error getting top songs:', error);
-      throw error;
+      console.error('Database search error:', error);
+      return [];
     }
   }
 
-  async generateStreamUrl(music) {
-    try {
-      switch(music.source) {
-        case 'youtube':
-          return await this.getYoutubeStream(music.source_id);
-        case 'itunes':
-          // Fallback to preview_url if full version not available
-          return music.preview_url;
-        default:
-          throw createError('Unsupported music source', 400);
+  // Helper function để phân loại thể loại
+  async classifyGenres(title = '', artist = '') {
+    const text = `${title} ${artist}`.toLowerCase();
+    const genres = [];
+
+    // Các rule để phân loại
+    const genreRules = {
+      'romance': ['love', 'heart', 'romantic', 'yêu', 'tình yêu', 'valentine'],
+      'sad': ['sad', 'buồn', 'lonely', 'alone', 'cry', 'khóc', 'nước mắt'],
+      'party': ['party', 'dance', 'club', 'remix', 'edm'],
+      'k-pop': ['k-pop', 'kpop', 'korean', 'korea', 'bts', 'blackpink'],
+      'hip-hop': ['rap', 'hip hop', 'hip-hop', 'trap'],
+      'chill': ['chill', 'relax', 'acoustic'],
+      'pop': ['pop', 'nhạc trẻ'],
+      'dance & electronic': ['edm', 'electronic', 'dance'],
+      'indie & alternative': ['indie', 'alternative'],
+      'r&b & soul': ['r&b', 'soul', 'rhythm and blues']
+    };
+
+    // Check từng rule
+    for (const [genre, keywords] of Object.entries(genreRules)) {
+      if (keywords.some(keyword => text.includes(keyword))) {
+        genres.push(genre);
       }
-    } catch (error) {
-      console.error('Error generating stream URL:', error);
-      throw error;
     }
+
+    // Thêm genre mặc định nếu không tìm thấy genre nào
+    if (genres.length === 0) {
+      genres.push('pop');
+    }
+
+    // Lấy genre IDs từ database
+    const placeholders = genres.map(() => '?').join(',');
+    const [rows] = await db.query(
+      `SELECT id, name FROM Genres WHERE name IN (${placeholders})`,
+      genres
+    );
+
+    return rows;
   }
 
-  async getYoutubeStream(videoId) {
+  // Search trên YouTube
+  async searchYouTube(query, limit = 10) {
     try {
-      const info = await ytdl.getInfo(videoId);
-      const audioFormat = ytdl.chooseFormat(info.formats, { 
-        quality: 'highestaudio',
-        filter: 'audioonly' 
+      const searchQuery = `${query} official music video`;
+      const videos = await YouTube.YouTube.search(searchQuery, {
+        limit: Math.min(limit * 2, 20),
+        type: 'video',
+        safeSearch: true
       });
-      
-      if (!audioFormat) {
-        throw createError('No audio format found', 404);
-      }
 
-      return audioFormat.url;
+      // Format và thêm genres cho mỗi kết quả
+      const formattedResults = await Promise.all(
+        videos
+          .filter(video => {
+            const duration = video.duration / 1000;
+            return duration >= 120 && duration <= 600;
+          })
+          .map(async video => {
+            // Phân loại genres
+            const genres = await this.classifyGenres(
+              video.title,
+              video.channel?.name
+            );
+
+            return {
+              id: `yt_${video.id}`,
+              title: video.title,
+              artist_name: video.channel?.name || 'Unknown Artist',
+              image_url: video.thumbnail?.url || '',
+              youtube_url: `https://www.youtube.com/watch?v=${video.id}`,
+              youtube_thumbnail: video.thumbnail?.url || '',
+              duration: Math.floor(video.duration / 1000),
+              source: 'youtube',
+              play_count: video.views || 0,
+              favorite_count: 0,
+              description: video.description || '',
+              published_at: video.uploadedAt || new Date().toISOString(),
+              genres: genres
+            };
+          })
+      );
+
+      return formattedResults.slice(0, limit);
+
     } catch (error) {
-      console.error('Error getting YouTube stream:', error);
-      throw createError('Failed to get stream URL', 500);
+      console.error('YouTube search error:', error);
+      return [];
     }
   }
 
-  async searchAndAddYoutubeSource(musicId, title, artist) {
+  // Combine kết quả
+  async searchAll(query, limit = 20) {
     try {
-      const searchQuery = `${title} ${artist} official audio`;
-      const searchResults = await ytdl.search(searchQuery, { limit: 1 });
+      // Tìm trong database trước
+      const dbResults = await this.searchDatabase(query, Math.floor(limit / 2));
       
-      if (searchResults.length > 0) {
-        const videoId = searchResults[0].id;
-        const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-        const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
-
-        // Sử dụng stored procedure đã tạo
-        await db.execute(
-          'CALL update_youtube_source(?, ?, ?, ?)',
-          [musicId, videoId, videoUrl, thumbnailUrl]
-        );
-        
-        return videoId;
-      }
-      throw createError('No YouTube source found', 404);
+      // Luôn tìm trên YouTube để có kết quả đa dạng
+      const youtubeResults = await this.searchYouTube(query, Math.ceil(limit / 2));
+      
+      // Kết hợp và sắp xếp kết quả
+      const combinedResults = [...dbResults, ...youtubeResults];
+      
+      // Sắp xếp theo lượt play giảm dần
+      combinedResults.sort((a, b) => (b.play_count || 0) - (a.play_count || 0));
+      
+      return combinedResults;
     } catch (error) {
-      console.error('Error adding YouTube source:', error);
-      throw error;
+      console.error('Search error:', error);
+      return [];
     }
   }
 }

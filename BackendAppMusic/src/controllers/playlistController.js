@@ -4,7 +4,7 @@ import { createError } from '../utils/error.js';
 class PlaylistController {
   async getUserPlaylists(req, res, next) {
     try {
-      const playlists = await playlistService.getUserPlaylists(req.user.uid);
+      const playlists = await playlistService.getUserPlaylists();
       res.json({
         status: 'success',
         data: playlists
@@ -20,7 +20,7 @@ class PlaylistController {
       if (!name) {
         throw createError('Playlist name is required', 400);
       }
-      const playlist = await playlistService.createPlaylist(req.user.uid, name, description);
+      const playlist = await playlistService.createPlaylist(name, description);
       res.status(201).json({
         status: 'success',
         data: playlist
@@ -32,7 +32,7 @@ class PlaylistController {
 
   async getPlaylistById(req, res, next) {
     try {
-      const playlist = await playlistService.getPlaylistById(req.params.id, req.user.uid);
+      const playlist = await playlistService.getPlaylistById(req.params.id);
       if (!playlist) {
         throw createError('Playlist not found', 404);
       }
@@ -48,7 +48,7 @@ class PlaylistController {
   async updatePlaylist(req, res, next) {
     try {
       const { name, description } = req.body;
-      const playlist = await playlistService.updatePlaylist(req.params.id, req.user.uid, { name, description });
+      const playlist = await playlistService.updatePlaylist(req.params.id, { name, description });
       res.json({
         status: 'success',
         data: playlist
@@ -60,7 +60,7 @@ class PlaylistController {
 
   async deletePlaylist(req, res, next) {
     try {
-      await playlistService.deletePlaylist(req.params.id, req.user.uid);
+      await playlistService.deletePlaylist(req.params.id);
       res.status(204).send();
     } catch (error) {
       next(error);
@@ -73,7 +73,7 @@ class PlaylistController {
       if (!musicId) {
         throw createError('Music ID is required', 400);
       }
-      await playlistService.addToPlaylist(req.params.id, musicId, req.user.uid);
+      await playlistService.addToPlaylist(req.params.id, musicId);
       res.status(201).json({
         status: 'success',
         message: 'Song added to playlist'
@@ -85,7 +85,7 @@ class PlaylistController {
 
   async removeSongFromPlaylist(req, res, next) {
     try {
-      await playlistService.removeFromPlaylist(req.params.id, req.params.songId, req.user.uid);
+      await playlistService.removeFromPlaylist(req.params.id, req.params.songId);
       res.status(204).send();
     } catch (error) {
       next(error);
@@ -94,7 +94,7 @@ class PlaylistController {
 
   async getPlaylistSongs(req, res, next) {
     try {
-      const songs = await playlistService.getPlaylistSongs(req.params.id, req.user.uid);
+      const songs = await playlistService.getPlaylistSongs(req.params.id);
       res.json({
         status: 'success',
         data: songs

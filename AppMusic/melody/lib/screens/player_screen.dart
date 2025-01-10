@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:melody/services/audio_handler.dart';
 
 class PlayerScreen extends StatefulWidget {
   @override
@@ -16,19 +15,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
-    _setupAudioHandler();
+    // _setupAudioHandler();
   }
 
-  Future<void> _setupAudioHandler() async {
-    _audioHandler = await AudioService.init(
-      builder: () => MyAudioHandler(),
-      config: const AudioServiceConfig(
-        androidNotificationChannelId: 'com.myapp.audio',
-        androidNotificationChannelName: 'Audio Service',
-        androidNotificationOngoing: true,
-      ),
-    );
-  }
+  // Future<void> _setupAudioHandler() async {
+  //   _audioHandler = await AudioService.init(
+  //     builder: () => MyAudioHandler(),
+  //     config: const AudioServiceConfig(
+  //       androidNotificationChannelId: 'com.myapp.audio',
+  //       androidNotificationChannelName: 'Audio Service',
+  //       androidNotificationOngoing: true,
+  //     ),
+  //   );
+  // }
 
   void _handlePlayPause() async {
     final playbackState = _audioHandler.playbackState.value;

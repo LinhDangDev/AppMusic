@@ -1,20 +1,29 @@
+import mysql from 'mysql2/promise';
 
-const mongoose = require('mongoose');
-const dotenv = require('dotenv');
+const pool = mysql.createPool({
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'appmusic',
+  password: process.env.DB_PASSWORD || 'cntt15723',
+  database: process.env.DB_NAME || 'app_music',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
+});
 
-dotenv.config();
-
-const connectDB = async () => {
-  try {
-    await mongoose.connect(process.env.MONGO_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
-    console.log('MongoDB connected...');
-  } catch (err) {
-    console.error(err.message);
-    process.exit(1);
+const connectWithRetry = async (retries = 5, delay = 5000) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const connection = await pool.getConnection();
+      console.log('✅ Database connected successfully');
+      connection.release();
+      return pool;
+    } catch (err) {
+      console.error(`❌ Database connection attempt ${i + 1} failed:`, err.message);
+      if (i === retries - 1) throw err;
+      console.log(`Retrying in ${delay/1000} seconds...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
   }
 };
 
-module.exports = connectDB;
+export { pool as default, connectWithRetry };

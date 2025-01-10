@@ -1,67 +1,57 @@
 services:
+  redis:
+    image: redis:alpine
+    container_name: app_music_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  mysql:
+    image: mysql:8.0
+    container_name: app_music_db
+    environment:
+      MYSQL_DATABASE: app_music
+      MYSQL_USER: appmusic
+      MYSQL_PASSWORD: appmusic123
+      MYSQL_ROOT_PASSWORD: root123
+    volumes:
+      - ./init:/docker-entrypoint-initdb.d
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3307:3306"
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   app:
     build: .
+    container_name: app_music_backend
+    environment:
+      DB_HOST: mysql
+      DB_USER: appmusic
+      DB_PASSWORD: appmusic123
+      DB_NAME: app_music
+      NODE_ENV: development
+      ITUNES_API: "https://itunes.apple.com/vn/rss/topsongs/limit=100/json"
+      ENABLE_CRON_SYNC: "true"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     ports:
       - "3000:3000"
-    networks:
-      - app-network
-    environment:
-      - DB_HOST=mysql
-      - DB_USER=appmusic
-      - DB_PASSWORD=appmusic123
-      - DB_NAME=app_music
-      - REDIS_HOST=redis
-      - FIREBASE_TYPE=service_account
-      - FIREBASE_PROJECT_ID=app-mussic
-      - FIREBASE_PRIVATE_KEY_ID=e5ed1b24b51ffbe7b7ba8dcafd42f8ad052fb0af
-      - FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDdfBaVH4oykTrO\nmOXzgAavLajd39M7Wyqrepkrs/LVh02ymgK+YazKJxanrNlbdvtAEol3SCCVOhj6\nP7nALhrv1kgqxIcgd7PGGTJG9dtMSGpT9PMSrQmIFcOeS08bVQ6a7ayuFK9egGJL\nF5KeTSGCME6Z59U8Fz1iTLICGbrP1wNi4narBEn0Si1dMF3wGAtoJPpIyQiLLtTV\ndT75q/afjr4B0WDElwDbzXFI+tesv1bx3URvJBUvAzQCp4GYA76514p6nImXs2xr\nhbekmbCBSLXWKmFE898PjbjyQvtTJDfhIEKYQmiySpqQDEkttmFTyZiztPuAw/7T\n9ta5TqJDAgMBAAECggEAAc+VFa9g1LdYQ5PUyXq3U0ZXIPKcClpdTR1JqaWlK3bE\nPVzB/1F9dVeqzpXSCcvoE6bd0Iev8IMS7N+JgsHoaXlB33ZPjoXmsTdyhZ8BUIHa\nZgj/gHHBaAdEMVlMnRzDFk7cKxOIjYgU2v1R2bvStXr0oZCCL1AXVI7ro6sXL8Ip\nOXAH2uLmPCmDR1AZzG3oaSA5H3e5FL8BCi9kQ6tWU3Kd8dc0dxjj6MbGp9MpvZs/\nQAuIWnrzEgHtqYz2UYeTZDcGR4FtflNWEhIcF6hAOn02e33hOa/uIErSi4ZQFS7e\n49qSDk7v183ekNeuCg7LUDeC9rKHlVIp3ipDxfTZIQKBgQDyspUGOdfOtgu9pmTd\nnUloVIXGKrIpHmV+acH8jGhPiIbo99KlPQZ7e+T451e+W8mYGZ5k8FhEg5Z0Li0P\nCFDnfkv4qlzrAxYlwuynNV/pZ4fq6XZEa7x/gvRSHaFwZUWGgGtqFSi4Rr9+HXwS\n0aRLu9MQ+vEDubse+UcFRbF0YwKBgQDpn9tu46KW7IIRXChfV/bEBqiPcBlRYrZ9\nG8moo3EKzkds/LSc979/ZxDLOYMjJA5rLTtCOe78Z74gWP9T1E7JowU9874llgyk\n0mU6lrc+ldbxSWAVF7qHLTsfKPGs7od3diUVPt0ZuxGVTJ+Oob51TLhBZCAfBnV5\niT6ysIzQoQKBgQDHdISMzVTSiUI05l7W0sDVgUE/jy9EI7r9nSTTzQCc/HMDW0g+\njFybd0LCXD38L6sJ2WQXSH8CL7KiYKCfThJPbbg58KjUa4D0H7Il6POd+nv1T1Dn\nAjO0B4eLRNa8bD4rP7cHQ8RnTZ1qpAin3qrLotzfg5w3l5h06CC58IDaSQKBgHrh\nmUKXOwLVPYiyB442r1XmBq0Dkl2LZV8iyYwJA8FiRJFfzgQuD6yMYnnyMza9lVPs\nQ5oO7NQYIRnUld/a8OH//Bbc6KvOY7Ih9BrAAXxKxfa92Grfwz2sncdC+vMxt1Ev\ndEvbd+I70gDMf7Q/APWjt9q1Nmv7MrkNZkwIrthhAoGBAKHE9mSPTpxbjG9oYMgp\nX1Nr73gDBomMBLxqNZL9Ce6IPb4pk+ztzFsH68+QM2JodfVJr626mxXYG/fSriY1\nkhIG3IMKUOvD9dkJ1K51TQGUylj0hYmiWvfysCndRUu3PjB2kNGefoeoFDg7UpkX\naIbuER/Wn+82hqGiRSqu7xlx\n-----END PRIVATE KEY-----\n"
-      - FIREBASE_CLIENT_EMAIL=firebase-adminsdk-vzz2e@app-mussic.iam.gserviceaccount.com
-      - FIREBASE_CLIENT_ID=114734280250543782580
-      - FIREBASE_CERT_URL=https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-vzz2e%40app-mussic.iam.gserviceaccount.com
-      - NODE_ENV=development
-      - PORT=3000
-      - HOST=0.0.0.0
-      - YOUTUBE_API_KEY=AIzaSyDfKJHDC6zEWBZ3TrPo0pV9J_hBZor1xqA
     depends_on:
       mysql:
         condition: service_healthy
       redis:
         condition: service_started
     restart: always
-
-  mysql:
-    image: mysql:8.0
-    ports:
-      - "3307:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: app_music
-      MYSQL_USER: appmusic
-      MYSQL_PASSWORD: appmusic123
     volumes:
-      - mysql_data:/var/lib/mysql
-      - ./init/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    networks:
-      - app-network
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u$$MYSQL_USER", "-p$$MYSQL_PASSWORD"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 10s
-    command: --default-authentication-plugin=mysql_native_password
-    restart: always
-
-  redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
-    networks:
-      - app-network
-
-networks:
-  app-network:
-    driver: bridge
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
 
 volumes:
   mysql_data:
+  redis_data:
