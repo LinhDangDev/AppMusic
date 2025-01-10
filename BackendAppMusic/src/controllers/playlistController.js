@@ -115,6 +115,28 @@ class PlaylistController {
       next(error);
     }
   }
+
+  async deletePlaylistByParam(req, res, next) {
+    try {
+      const playlistId = req.query.playlist_id || req.body.playlist_id;
+      
+      if (!playlistId) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'playlist_id is required'
+        });
+      }
+
+      await playlistService.deletePlaylist(playlistId);
+      
+      res.json({
+        status: 'success',
+        message: `Playlist ${playlistId} deleted successfully`
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export default new PlaylistController();

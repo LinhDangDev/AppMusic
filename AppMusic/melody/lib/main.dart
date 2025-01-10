@@ -4,23 +4,22 @@ import 'package:audio_service/audio_service.dart';
 import 'package:melody/services/audio_handler.dart';
 import 'package:get/get.dart';
 import 'package:melody/provider/music_controller.dart';
+import 'package:provider/provider.dart';
+import 'package:melody/provider/audio_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await initializeService();
   
-  Get.put(MusicController());
+  final musicController = Get.put(MusicController());
+  final audioProvider = AudioProvider();
+  await audioProvider.initAudioHandler();
   
-  runApp(const MyApp());
-}
-
-Future<void> initializeService() async {
-  await AudioService.init(
-    builder: () => MyAudioHandler(),
-    config: AudioServiceConfig(
-      androidNotificationChannelId: 'com.myapp.audio',
-      androidNotificationChannelName: 'Audio Service',
-      androidNotificationOngoing: true,
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: audioProvider),
+      ],
+      child: const MyApp(),
     ),
   );
 }

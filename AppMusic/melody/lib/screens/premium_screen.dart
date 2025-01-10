@@ -187,7 +187,7 @@ class PremiumScreen extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.grey[900],
+        color: Colors.grey[100],
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -207,9 +207,8 @@ class PremiumScreen extends StatelessWidget {
           Text(
             title,
             style: TextStyle(
+              color: Colors.black,
               fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: color,
             ),
           ),
           Text(

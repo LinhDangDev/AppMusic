@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:melody/constants/app_colors.dart';
 import 'package:melody/widgets/bottom_player_nav.dart';
 import 'package:melody/services/music_service.dart';
-import 'package:melody/models/music.dart';
+// import 'package:melody/models/music.dart';
 import 'package:melody/models/search_result.dart';
 import 'dart:async';
 import 'package:get/get.dart';
 import 'package:melody/screens/player_screen.dart';
+import 'package:melody/screens/home_screen.dart';
 
 class SearchScreen extends StatefulWidget {
+  const SearchScreen({Key? key}) : super(key: key);
+
   @override
   _SearchScreenState createState() => _SearchScreenState();
 }
@@ -66,6 +69,7 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.black,
       body: Container(
         decoration: BoxDecoration(
           gradient: AppColors.backgroundGradient,
@@ -73,43 +77,30 @@ class _SearchScreenState extends State<SearchScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              // Search Bar
+              // Search UI
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: TextField(
                   controller: _searchController,
-                  style: TextStyle(color: Colors.white),
+                  style: TextStyle(color: Colors.black),
                   decoration: InputDecoration(
                     hintText: 'Tìm kiếm bài hát, nghệ sĩ...',
-                    hintStyle: TextStyle(color: Colors.grey),
-                    prefixIcon: Icon(Icons.search, color: Colors.grey),
+                    hintStyle: TextStyle(color: Colors.grey[600]),
+                    prefixIcon: Icon(Icons.search, color: Colors.black),
                     filled: true,
-                    fillColor: Colors.white.withOpacity(0.1),
+                    fillColor: Colors.grey[200],
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(30),
                       borderSide: BorderSide.none,
                     ),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    contentPadding: EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 16),
                   ),
                   onChanged: (value) => _handleSearch(value),
                 ),
               ),
-
-              // Loading indicator
-              if (_isLoading)
-                Center(child: CircularProgressIndicator()),
-
-              // Error message
-              if (_error.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    _error,
-                    style: TextStyle(color: Colors.red),
-                  ),
-                ),
-
-              // Search results
+              
+              // Search Results
               Expanded(
                 child: ListView.builder(
                   itemCount: _searchResults.length,
@@ -118,23 +109,26 @@ class _SearchScreenState extends State<SearchScreen> {
                     return SearchResultItem(
                       result: result,
                       onTap: () {
-                        Get.to(() => PlayerScreen(
-                          title: result.title,
-                          artist: result.artistName,
-                          imageUrl: result.displayImage,
-                          youtubeId: result.youtubeId,
-                        ));
+                        Get.to(
+                          () => PlayerScreen(
+                            title: result.title,
+                            artist: result.artistName,
+                            imageUrl: result.displayImage,
+                            youtubeId: result.youtubeId,
+                          ),
+                          transition: Transition.downToUp,
+                        );
                       },
                     );
                   },
                 ),
               ),
+              
+              // Bottom Navigation
+              const BottomPlayerNav(currentIndex: 1),
             ],
           ),
         ),
-      ),
-      bottomNavigationBar: BottomPlayerNav(
-        currentIndex: 1,
       ),
     );
   }
@@ -268,7 +262,7 @@ class SearchResultItem extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     return ListTile(
-      leading: Icon(icon, color: Colors.white),
+      leading: Icon(icon, color: Colors.black),
       title: Text(
         title,
         style: TextStyle(
@@ -302,9 +296,8 @@ class SearchResultItem extends StatelessWidget {
       title: Text(
         result.title,
         style: TextStyle(
-          color: Colors.white,
+          color: Colors.black,
           fontSize: 16,
-          fontWeight: FontWeight.w500,
         ),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -319,7 +312,7 @@ class SearchResultItem extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       ),
       trailing: IconButton(
-        icon: Icon(Icons.more_vert, color: Colors.white),
+        icon: Icon(Icons.more_vert, color: Colors.black),
         onPressed: () => _showOptions(context),
       ),
       onTap: onTap,

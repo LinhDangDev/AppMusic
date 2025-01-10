@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'dart:ui';
@@ -49,7 +51,7 @@ class HomeScreen extends GetView<MusicController> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const SizedBox(height: 10),
-                        _buildRecentlyPlayed(),
+                        _buildRecentlyPlayed(context),
                         const SizedBox(height: 15),
                         _buildPlaylists(context),
                         const SizedBox(height: 32),
@@ -81,18 +83,18 @@ class HomeScreen extends GetView<MusicController> {
       title: const Text(
         'Good afternoon',
         style: TextStyle(
-          color: Colors.white,
+          color: Colors.black,
           fontSize: 24,
           fontWeight: FontWeight.bold,
         ),
       ),
       actions: [
         IconButton(
-          icon: const Icon(Icons.notifications_none, color: Colors.white),
+          icon: const Icon(Icons.notifications_none, color: Colors.black),
           onPressed: () {},
         ),
         IconButton(
-          icon: const Icon(Icons.settings, color: Colors.white),
+          icon: const Icon(Icons.settings, color: Colors.black),
           onPressed: () => _showSettingsDrawer(context),
         ),
         const SizedBox(width: 8),
@@ -161,14 +163,14 @@ class HomeScreen extends GetView<MusicController> {
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: Colors.grey[900],
+          color: Colors.grey[200],
           borderRadius: BorderRadius.circular(15),
         ),
-        child: Icon(icon, color: Colors.white),
+        child: Icon(icon, color: Colors.black),
       ),
       title: Text(
         title,
-        style: const TextStyle(color: Colors.white),
+        style: const TextStyle(color: Colors.black),
       ),
       onTap: onTap ?? () => Get.back(),
     );
@@ -215,7 +217,7 @@ class HomeScreen extends GetView<MusicController> {
         const Text(
           'Get You Started',
           style: TextStyle(
-            color: Colors.white,
+            color: Colors.black,
             fontSize: 24,
             fontWeight: FontWeight.bold,
           ),
@@ -231,11 +233,56 @@ class HomeScreen extends GetView<MusicController> {
                 final music = controller.allMusic[index];
                 return Padding(
                   padding: const EdgeInsets.only(right: 16),
-                  child: MusicCard(
-                    imageUrl: music.displayImage,
-                    title: music.title,
-                    subtitle: music.artistName,
-                    youtubeId: music.youtubeId,
+                  child: Container(
+                    width: 180,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(8),
+                          ),
+                          child: Image.network(
+                            music.youtubeThumbnail,
+                            width: double.infinity,
+                            height: 120,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                music.title,
+                                style: TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                music.artistName,
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontSize: 12,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 );
               },
@@ -246,38 +293,55 @@ class HomeScreen extends GetView<MusicController> {
     );
   }
 
-  Widget _buildRecentlyPlayed() {
+  Widget _buildRecentlyPlayed(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
           'Recently played',
           style: TextStyle(
-            color: Colors.white,
+            color: Colors.black,
             fontSize: 24,
             fontWeight: FontWeight.bold,
           ),
         ),
         const SizedBox(height: 16),
-        SizedBox(
-          height: 200,
-          child: Obx(() => ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: controller.rankings.length,
-                itemBuilder: (context, index) {
-                  final music = controller.rankings[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 16),
-                    child: MusicCard(
-                      imageUrl: music.displayImage,
+        Obx(() {
+          final itemCount = controller.rankings.length;
+          final pageCount =
+              (itemCount / 6).ceil(); // Số trang, mỗi trang 6 items (2x3)
+
+          return SizedBox(
+            height: 200, // Chiều cao cố định cho 3 hàng
+            child: PageView.builder(
+              itemCount: pageCount,
+              itemBuilder: (context, pageIndex) {
+                return GridView.builder(
+                  physics: NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                    childAspectRatio: 3,
+                  ),
+                  itemCount: min(
+                      6, itemCount - pageIndex * 6), // Mỗi trang tối đa 6 items
+                  itemBuilder: (context, index) {
+                    final actualIndex = pageIndex * 6 + index;
+                    if (actualIndex >= itemCount) return Container();
+                    final music = controller.rankings[actualIndex];
+                    return RecentMusicCard(
+                      imageUrl: music.youtubeThumbnail,
                       title: music.title,
                       subtitle: music.artistName,
                       youtubeId: music.youtubeId,
-                    ),
-                  );
-                },
-              )),
-        ),
+                    );
+                  },
+                );
+              },
+            ),
+          );
+        }),
       ],
     );
   }
@@ -286,34 +350,86 @@ class HomeScreen extends GetView<MusicController> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Biggest Hits',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Biggest Hits',
+              style: TextStyle(
+                color: Colors.black,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            // Dropdown chọn region
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(16),
+              ),
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: Obx(() => DropdownButton<String>(
+                    value: controller.selectedRegion.value,
+                    dropdownColor: Colors.grey[200],
+                    underline: Container(), // Bỏ đường gạch chân
+                    style: TextStyle(color: Colors.black),
+                    icon: Icon(Icons.arrow_drop_down, color: Colors.black),
+                    items: [
+                      DropdownMenuItem(
+                        value: 'VN',
+                        child: Text('Vietnam',
+                            style: TextStyle(color: Colors.black)),
+                      ),
+                      DropdownMenuItem(
+                        value: 'US',
+                        child: Text('United States',
+                            style: TextStyle(color: Colors.black)),
+                      ),
+                    ],
+                    onChanged: (String? newValue) {
+                      if (newValue != null) {
+                        controller.loadBiggestHits(newValue);
+                      }
+                    },
+                  )),
+            ),
+          ],
         ),
         const SizedBox(height: 16),
-        SizedBox(
-          height: 200,
-          child: Obx(() => ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: controller.allMusic.length,
-                itemBuilder: (context, index) {
-                  final music = controller.allMusic[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 16),
-                    child: MusicCard(
-                      imageUrl: music.displayImage,
+        Obx(() {
+          final itemCount = controller.biggestHits.length;
+          final pageCount = (itemCount / 6).ceil();
+
+          return SizedBox(
+            height: 200,
+            child: PageView.builder(
+              itemCount: pageCount,
+              itemBuilder: (context, pageIndex) {
+                return GridView.builder(
+                  physics: NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                    childAspectRatio: 3,
+                  ),
+                  itemCount: min(6, itemCount - pageIndex * 6),
+                  itemBuilder: (context, index) {
+                    final actualIndex = pageIndex * 6 + index;
+                    if (actualIndex >= itemCount) return Container();
+                    final music = controller.biggestHits[actualIndex];
+                    return RecentMusicCard(
+                      imageUrl: music.youtubeThumbnail,
                       title: music.title,
                       subtitle: music.artistName,
                       youtubeId: music.youtubeId,
-                    ),
-                  );
-                },
-              )),
-        ),
+                    );
+                  },
+                );
+              },
+            ),
+          );
+        }),
       ],
     );
   }
@@ -325,19 +441,43 @@ class HomeScreen extends GetView<MusicController> {
         const Text(
           'Browse genres',
           style: TextStyle(
-            color: Colors.white,
+            color: Colors.black,
             fontSize: 24,
             fontWeight: FontWeight.bold,
           ),
         ),
         const SizedBox(height: 16),
-        Obx(() => Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: controller.genres
-                  .map((genre) => GenreCard(genre: genre))
-                  .toList(),
-            )),
+        Obx(() {
+          final itemCount = controller.genres.length;
+          final pageCount =
+              (itemCount / 6).ceil(); // Số trang, mỗi trang 6 items (2x3)
+
+          return SizedBox(
+            height: 200, // Chiều cao cố định cho 3 hàng
+            child: PageView.builder(
+              itemCount: pageCount,
+              itemBuilder: (context, pageIndex) {
+                return GridView.builder(
+                  physics: NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                    childAspectRatio: 3,
+                  ),
+                  itemCount: min(
+                      6, itemCount - pageIndex * 6), // Mỗi trang tối đa 6 items
+                  itemBuilder: (context, index) {
+                    final actualIndex = pageIndex * 6 + index;
+                    if (actualIndex >= itemCount) return Container();
+                    final genre = controller.genres[actualIndex];
+                    return GenreCard(genre: genre);
+                  },
+                );
+              },
+            ),
+          );
+        }),
       ],
     );
   }
@@ -355,7 +495,7 @@ class SectionTitle extends StatelessWidget {
       child: Text(
         title,
         style: TextStyle(
-          color: Colors.white,
+          color: Colors.black,
           fontSize: 20,
           fontWeight: FontWeight.bold,
         ),
@@ -369,8 +509,172 @@ class MusicCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final String youtubeId;
+  final bool isCompact; // Thêm prop để phân biệt kiểu hiển thị
 
   const MusicCard({
+    Key? key,
+    required this.imageUrl,
+    required this.title,
+    required this.subtitle,
+    required this.youtubeId,
+    this.isCompact = false, // Mặc định là false cho horizontal scroll
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    if (isCompact) {
+      // Layout cho grid view (Recently played)
+      return GestureDetector(
+        onTap: () {
+          Get.to(() => PlayerScreen(
+                title: title,
+                artist: subtitle,
+                imageUrl: imageUrl,
+                youtubeId: youtubeId,
+              ));
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.grey[200],
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 2,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(8),
+                  ),
+                  child: Container(
+                    width: double.infinity,
+                    color: Colors.grey[800],
+                    child: Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Icon(Icons.music_note, color: Colors.white);
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 1,
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          color: Colors.grey[400],
+                          fontSize: 11,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      // Giữ nguyên layout cũ cho horizontal scroll
+      return GestureDetector(
+        onTap: () {
+          Get.to(() => PlayerScreen(
+                title: title,
+                artist: subtitle,
+                imageUrl: imageUrl,
+                youtubeId: youtubeId,
+              ));
+        },
+        child: Container(
+          width: 180,
+          decoration: BoxDecoration(
+            color: Colors.grey[200],
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Image.network(
+                    imageUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: Colors.grey[800],
+                        child: Icon(Icons.music_note, color: Colors.white),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 12,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+  }
+}
+
+class RecentMusicCard extends StatelessWidget {
+  final String imageUrl;
+  final String title;
+  final String subtitle;
+  final String youtubeId;
+
+  const RecentMusicCard({
     Key? key,
     required this.imageUrl,
     required this.title,
@@ -390,53 +694,56 @@ class MusicCard extends StatelessWidget {
             ));
       },
       child: Container(
-        width: 150,
-        height: 200,
         decoration: BoxDecoration(
-          color: Colors.grey[900],
-          borderRadius: BorderRadius.circular(8),
+          color: Colors.grey[200],
+          borderRadius: BorderRadius.circular(4),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
-              child: Image.network(
-                imageUrl,
-                height: 120,
-                width: 150,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    height: 120,
-                    width: 150,
-                    color: Colors.grey[800],
-                    child: Icon(Icons.music_note, color: Colors.white),
-                  );
-                },
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(4),
+                bottomLeft: Radius.circular(4),
+              ),
+              child: SizedBox(
+                width: 55,
+                height: 55,
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: Colors.grey[800],
+                      child:
+                          Icon(Icons.music_note, color: Colors.white, size: 24),
+                    );
+                  },
+                ),
               ),
             ),
             Expanded(
               child: Padding(
-                padding: EdgeInsets.all(8),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
                       title,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     Text(
                       subtitle,
                       style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 12,
+                        color: Colors.grey[400],
+                        fontSize: 11,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -449,5 +756,98 @@ class MusicCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class GenreCard extends StatelessWidget {
+  final Genre genre;
+
+  const GenreCard({Key? key, required this.genre}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(4),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            _getRandomColor(),
+            _getRandomColor(),
+          ],
+        ),
+      ),
+      child: Row(
+        children: [
+          // Icon hoặc hình ảnh đại diện cho genre
+          Container(
+            width: 55,
+            height: 55,
+            decoration: BoxDecoration(
+              color: Colors.black12,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(4),
+                bottomLeft: Radius.circular(4),
+              ),
+            ),
+            child: Icon(
+              _getGenreIcon(genre.name),
+              color: Colors.white,
+              size: 24,
+            ),
+          ),
+          // Tên genre
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text(
+                genre.name,
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Hàm trả về màu ngẫu nhiên cho gradient
+  Color _getRandomColor() {
+    final colors = [
+      Colors.purple,
+      Colors.blue,
+      Colors.teal,
+      Colors.pink,
+      Colors.orange,
+      Colors.indigo,
+    ];
+    // Sử dụng tên genre làm seed để màu không thay đổi mỗi lần rebuild
+    final index = genre.name.hashCode % colors.length;
+    return colors[index].withOpacity(0.7);
+  }
+
+  // Hàm trả về icon phù hợp với từng thể loại
+  IconData _getGenreIcon(String genreName) {
+    switch (genreName.toLowerCase()) {
+      case 'pop':
+        return Icons.music_note;
+      case 'rock':
+        return Icons.audiotrack;
+      case 'jazz':
+        return Icons.piano;
+      case 'classical':
+        return Icons.queue_music;
+      case 'hip hop':
+        return Icons.mic;
+      default:
+        return Icons.album;
+    }
   }
 }

@@ -4,7 +4,8 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 class MyAudioHandler extends BaseAudioHandler {
   final _player = AudioPlayer();
-  final _yt = YoutubeExplode();
+  
+  AudioPlayer get player => _player;
   
   MyAudioHandler() {
     _player.playbackEventStream.listen((event) {
@@ -12,33 +13,24 @@ class MyAudioHandler extends BaseAudioHandler {
     });
   }
 
-  Future<void> playYoutubeMusic(String videoId, String title, String artist) async {
+  Future<void> playYoutubeAudio(String youtubeId) async {
     try {
-      // Get streaming URL from YouTube
-      final manifest = await _yt.videos.streamsClient.getManifest(videoId);
+      // Get audio URL from YouTube
+      final yt = YoutubeExplode();
+      final manifest = await yt.videos.streamsClient.getManifest(youtubeId);
       final audioStream = manifest.audioOnly.withHighestBitrate();
       
       // Set audio source
-      await _player.setAudioSource(AudioSource.uri(
-        Uri.parse(audioStream.url.toString()),
-        tag: MediaItem(
-          id: videoId,
-          title: title,
-          artist: artist,
-        ),
-      ));
+      await _player.setAudioSource(
+        AudioSource.uri(Uri.parse(audioStream.url.toString())),
+      );
       
-      // Update metadata
-      mediaItem.add(MediaItem(
-        id: videoId,
-        title: title,
-        artist: artist,
-      ));
-
-      // Play
-      play();
+      // Play audio
+      await _player.play();
+      
+      yt.close();
     } catch (e) {
-      print("Error loading YouTube audio: $e");
+      print('Error in AudioHandler: $e');
     }
   }
 

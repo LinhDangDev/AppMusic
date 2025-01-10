@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "6958ea39-30e5-445c-ab7f-9e12afb84bf3",
 		"name": "Music App API",
-		"schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "18429925"
 	},
 	"item": [
@@ -14,7 +14,16 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": "{{base_url}}/api/music"
+						"url": {
+							"raw": "{{base_url}}/api/music",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"music"
+							]
+						}
 					},
 					"response": []
 				},
@@ -48,7 +57,18 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": "{{base_url}}/api/music/rankings/US"
+						"url": {
+							"raw": "{{base_url}}/api/music/rankings/US",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"music",
+								"rankings",
+								"US"
+							]
+						}
 					},
 					"response": []
 				}
@@ -62,7 +82,16 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": "{{base_url}}/api/artists"
+						"url": {
+							"raw": "{{base_url}}/api/artists",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"artists"
+							]
+						}
 					},
 					"response": []
 				},
@@ -71,7 +100,17 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": "{{base_url}}/api/artists/2"
+						"url": {
+							"raw": "{{base_url}}/api/artists/2",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"artists",
+								"2"
+							]
+						}
 					},
 					"response": []
 				},
@@ -80,7 +119,18 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": "{{base_url}}/api/artists/5/songs"
+						"url": {
+							"raw": "{{base_url}}/api/artists/5/songs",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"artists",
+								"5",
+								"songs"
+							]
+						}
 					},
 					"response": []
 				}
@@ -94,7 +144,16 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": "{{base_url}}/api/playlists"
+						"url": {
+							"raw": "{{base_url}}/api/playlists",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"playlists"
+							]
+						}
 					},
 					"response": []
 				},
@@ -144,15 +203,56 @@
 							"mode": "raw",
 							"raw": ""
 						},
-						"url": "{{base_url}}/api/playlists/1/songs"
+						"url": {
+							"raw": "{{base_url}}/api/playlists/1/songs",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"playlists",
+								"1",
+								"songs"
+							]
+						}
 					},
 					"response": []
 				},
 				{
-					"name": "New Request",
+					"name": "Find All Song in Playlist",
 					"request": {
 						"method": "GET",
 						"header": []
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Playlist",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"playlist_id\": 4\r\n    \r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:3000/api/playlists/delete",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"api",
+								"playlists",
+								"delete"
+							]
+						}
 					},
 					"response": []
 				}
@@ -166,7 +266,16 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": "{{base_url}}/api/genres"
+						"url": {
+							"raw": "{{base_url}}/api/genres",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"genres"
+							]
+						}
 					},
 					"response": []
 				},
@@ -175,7 +284,18 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": "{{base_url}}/api/genres/1/songs"
+						"url": {
+							"raw": "{{base_url}}/api/genres/1/songs",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"genres",
+								"1",
+								"songs"
+							]
+						}
 					},
 					"response": []
 				}
@@ -189,7 +309,17 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": "{{base_url}}/api/users/me"
+						"url": {
+							"raw": "{{base_url}}/api/users/me",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"users",
+								"me"
+							]
+						}
 					},
 					"response": []
 				},
@@ -198,7 +328,18 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": "{{base_url}}/api/users/me/favorites"
+						"url": {
+							"raw": "{{base_url}}/api/users/me/favorites",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"users",
+								"me",
+								"favorites"
+							]
+						}
 					},
 					"response": []
 				},
@@ -207,7 +348,19 @@
 					"request": {
 						"method": "POST",
 						"header": [],
-						"url": "{{base_url}}/api/users/me/favorites/1"
+						"url": {
+							"raw": "{{base_url}}/api/users/me/favorites/1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"users",
+								"me",
+								"favorites",
+								"1"
+							]
+						}
 					},
 					"response": []
 				},
@@ -216,7 +369,19 @@
 					"request": {
 						"method": "DELETE",
 						"header": [],
-						"url": "{{base_url}}/api/users/me/favorites/1"
+						"url": {
+							"raw": "{{base_url}}/api/users/me/favorites/1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"users",
+								"me",
+								"favorites",
+								"1"
+							]
+						}
 					},
 					"response": []
 				}
