@@ -166,6 +166,56 @@ class MusicService {
     }
   }
 
+  Future<List<Music>> getBiggestHits(String region) async {
+    try {
+      final response = await _dio.get('${ApiConstants.baseUrl}/api/music/rankings/$region');
+      
+      if (response.statusCode == 200 && response.data['status'] == 'success') {
+        final rankingsData = response.data['data']['rankings'] as List;
+        return rankingsData.map((song) {
+          // Validate YouTube data
+          String youtubeId = _extractYoutubeId(song['youtube_url'] ?? '');
+          String thumbnail = song['youtube_thumbnail'] ?? '';
+          
+          if (thumbnail.isEmpty && youtubeId.isNotEmpty) {
+            thumbnail = 'https://img.youtube.com/vi/$youtubeId/mqdefault.jpg';
+          }
+
+          return Music(
+            id: song['id'].toString(),
+            title: song['title'] ?? 'Unknown',
+            artistName: song['artist_name'] ?? 'Unknown Artist',
+            youtubeId: youtubeId,
+            youtubeThumbnail: thumbnail,
+            playCount: song['play_count']?.toString(),
+            position: song['position'],
+            duration: song['duration']?.toString(),
+            genre: (song['genres'] as List?)?.join(', '),
+          );
+        }).toList();
+      }
+      throw Exception('Failed to load rankings');
+    } catch (e) {
+      print('Error loading rankings: $e');
+      return [];
+    }
+  }
+
+  String _extractYoutubeId(String url) {
+    if (url.isEmpty) return '';
+    try {
+      if (url.contains('youtu.be/')) {
+        return url.split('youtu.be/')[1].split('?')[0];
+      } else if (url.contains('youtube.com/watch')) {
+        return Uri.parse(url).queryParameters['v'] ?? '';
+      }
+      return url;
+    } catch (e) {
+      print('Error extracting YouTube ID: $e');
+      return '';
+    }
+  }
+
   void dispose() {
     _yt.close();
   }

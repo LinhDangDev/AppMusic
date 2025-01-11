@@ -47,6 +47,7 @@ class MusicController extends GetxController {
   final RxList<Music> startedMusic = <Music>[].obs;
   final RxList<Music> randomMusic = <Music>[].obs;
   final Rx<Music?> currentSong = Rx<Music?>(null);
+  final RxList<Music> recentMusic = <Music>[].obs;
 
   @override
   void onInit() {
@@ -572,28 +573,40 @@ class MusicController extends GetxController {
     }
   }
 
-  Future<void> playMusic(String youtubeId, String title, String artist, String imageUrl) async {
+  Future<void> playMusic(
+    Music song, {
+    List<Music>? playlist,
+    int? currentIndex,
+    String? playlistName,
+  }) async {
     try {
-      isLoading.value = true;
-      
-      // Update UI state
-      currentTitle.value = title;
-      currentArtist.value = artist; 
-      currentImageUrl.value = imageUrl;
-      currentYoutubeId.value = youtubeId;
-      showMiniPlayer.value = true;
-
-      // Get audio URL
-      final audioUrl = await _musicService.getAudioUrl(youtubeId);
-      if (audioUrl != null) {
-        // Stop current playback
-        await audioPlayer.stop();
-        
-        // Set new audio source and play
-        await audioPlayer.setUrl(audioUrl);
-        await audioPlayer.play();
-        isPlaying.value = true;
+      // Set current queue if playlist is provided
+      if (playlist != null) {
+        currentQueue.assignAll(playlist);
+        currentQueueIndex.value = currentIndex ?? 0;
+        currentPlaylistName.value = playlistName ?? '';
+      } else {
+        // If no playlist, create single song queue
+        currentQueue.assignAll([song]);
+        currentQueueIndex.value = 0;
+        currentPlaylistName.value = '';
       }
+
+      // Update current music
+      currentMusic.value = song;
+      
+      // Update UI values
+      currentTitle.value = song.title;
+      currentArtist.value = song.artistName;
+      currentImageUrl.value = song.youtubeThumbnail;
+      currentYoutubeId.value = song.youtubeId;
+
+      // Handle audio change
+      await handleAudioChange();
+      
+      // Show mini player
+      showMiniPlayer.value = true;
+      
     } catch (e) {
       print('Error playing music: $e');
       Get.snackbar(
@@ -602,8 +615,6 @@ class MusicController extends GetxController {
         backgroundColor: Colors.red.withOpacity(0.7),
         colorText: Colors.white,
       );
-    } finally {
-      isLoading.value = false;
     }
   }
 
@@ -803,6 +814,20 @@ class MusicController extends GetxController {
       );
     } finally {
       isLoadingRankings.value = false;
+    }
+  }
+
+  // Add method to update recent music
+  void addToRecentMusic(Music song) {
+    // Remove song if it already exists
+    recentMusic.removeWhere((m) => m.id == song.id);
+    
+    // Add to beginning of list
+    recentMusic.insert(0, song);
+    
+    // Keep only last 20 songs
+    if (recentMusic.length > 20) {
+      recentMusic.removeLast();
     }
   }
 }

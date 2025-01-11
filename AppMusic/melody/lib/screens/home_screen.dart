@@ -68,9 +68,9 @@ class HomeScreen extends GetView<MusicController> {
                     ),
                     child: Column(
                       children: [
-                        _buildGetYouStarted(context),
+                        _buildGetYouStarted(),
                         const SizedBox(height: 32),
-                        _buildBiggestHits(context),
+                        _buildBiggestHits(),
                         const SizedBox(height: 32),
                         _buildRecentlyPlayed(context),
                         const SizedBox(height: 32),
@@ -221,85 +221,95 @@ class HomeScreen extends GetView<MusicController> {
     );
   }
 
-  Widget _buildGetYouStarted(BuildContext context) {
+  Widget _buildGetYouStarted() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Get You Started',
-          style: TextStyle(
-            color: Colors.black,
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            'Get You Started',
+            style: TextStyle(
+              color: Colors.black,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         SizedBox(
-          height: 200,
+          height: 190,
           child: Obx(() {
-            if (controller.randomMusic.isEmpty) {
-              return const Center(child: CircularProgressIndicator());
+            if (controller.isLoading.value) {
+              return Center(child: CircularProgressIndicator());
+            }
+
+            final suggestedSongs = controller.rankings.take(5).toList();
+            if (suggestedSongs.isEmpty) {
+              return Center(
+                child: Text(
+                  'No songs available',
+                  style: TextStyle(color: Colors.black),
+                ),
+              );
             }
 
             return ListView.builder(
               scrollDirection: Axis.horizontal,
-              itemCount: controller.randomMusic.length,
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              itemCount: suggestedSongs.length,
               itemBuilder: (context, index) {
-                final music = controller.randomMusic[index];
+                final music = suggestedSongs[index];
                 return GestureDetector(
-                  onTap: () => _playMusic(music),
+                  onTap: () {
+                    controller.playMusic(
+                      music,
+                      playlist: suggestedSongs,
+                      currentIndex: index,
+                      playlistName: "Get You Started"
+                    );
+                  },
                   child: Container(
-                    width: 160,
-                    margin: const EdgeInsets.only(right: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                    width: 140,
+                    margin: EdgeInsets.only(right: 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         ClipRRect(
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(8),
-                          ),
+                          borderRadius: BorderRadius.circular(8),
                           child: Image.network(
                             music.youtubeThumbnail,
-                            width: double.infinity,
-                            height: 120,
+                            width: 140,
+                            height: 140,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
-                              width: double.infinity,
-                              height: 120,
-                              color: Colors.grey[300],
-                              child: const Icon(Icons.music_note),
-                            ),
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                width: 140,
+                                height: 140,
+                                color: Colors.grey[300],
+                                child: Icon(Icons.music_note, size: 50),
+                              );
+                            },
                           ),
                         ),
-                        Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                music.title,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                music.artistName,
-                                style: TextStyle(
-                                  color: Colors.grey[600],
-                                  fontSize: 12,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
+                        const SizedBox(height: 4),
+                        Text(
+                          music.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          music.artistName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.grey[700],
+                            fontSize: 12,
                           ),
                         ),
                       ],
@@ -379,88 +389,82 @@ class HomeScreen extends GetView<MusicController> {
     );
   }
 
-  Widget _buildBiggestHits(BuildContext context) {
+  Widget _buildBiggestHits() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Biggest Hits',
-              style: TextStyle(
-                color: Colors.black,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Biggest Hits',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: BorderRadius.circular(16),
+              Obx(() => 
+                DropdownButton<String>(
+                  value: controller.selectedRegion.value,
+                  dropdownColor: Colors.white,
+                  style: TextStyle(color: Colors.black),
+                  underline: Container(),
+                  onChanged: (String? newValue) {
+                    if (newValue != null) {
+                      controller.selectedRegion.value = newValue;
+                      controller.loadBiggestHits(newValue);
+                    }
+                  },
+                  items: [
+                    DropdownMenuItem(value: 'VN', child: Text('Vietnam')),
+                    DropdownMenuItem(value: 'US', child: Text('US')),
+                    DropdownMenuItem(value: 'KR', child: Text('Korea')),
+                  ],
+                ),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Obx(() => DropdownButton<String>(
-                    value: controller.selectedRegion.value,
-                    dropdownColor: Colors.grey[200],
-                    underline: Container(),
-                    style: const TextStyle(color: Colors.black),
-                    icon:
-                        const Icon(Icons.arrow_drop_down, color: Colors.black),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'VN',
-                        child: Text('Vietnam',
-                            style: TextStyle(color: Colors.black)),
-                      ),
-                      DropdownMenuItem(
-                        value: 'US',
-                        child: Text('United States',
-                            style: TextStyle(color: Colors.black)),
-                      ),
-                    ],
-                    onChanged: (String? newValue) {
-                      if (newValue != null) {
-                        controller.selectedRegion.value = newValue;
-                        controller.loadBiggestHits(newValue);
-                      }
-                    },
-                  )),
-            ),
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: 16),
         Obx(() {
+          if (controller.isLoading.value) {
+            return Center(child: CircularProgressIndicator());
+          }
+
           if (controller.rankings.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
+            return Center(
+              child: Text(
+                'No rankings available',
+                style: TextStyle(color: Colors.black),
+              ),
+            );
           }
 
           return ListView.builder(
             shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: min(10, controller.rankings.length),
+            physics: NeverScrollableScrollPhysics(),
+            itemCount: controller.rankings.length,
             itemBuilder: (context, index) {
               final music = controller.rankings[index];
               return ListTile(
-                contentPadding: const EdgeInsets.symmetric(vertical: 4),
                 leading: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     SizedBox(
                       width: 30,
                       child: Text(
-                        '#${music.position}',
+                        '#${index + 1}',
                         style: TextStyle(
-                          fontSize: 16,
+                          color: index < 3 ? Colors.blue : Colors.grey[700],
                           fontWeight: FontWeight.bold,
-                          color: (music.position ?? 0) <= 3
-                              ? Colors.blue
-                              : Colors.grey,
                         ),
                       ),
                     ),
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(4),
                       child: Image.network(
                         music.youtubeThumbnail,
                         width: 50,
@@ -471,7 +475,7 @@ class HomeScreen extends GetView<MusicController> {
                             width: 50,
                             height: 50,
                             color: Colors.grey[300],
-                            child: const Icon(Icons.music_note),
+                            child: Icon(Icons.music_note, color: Colors.grey[700]),
                           );
                         },
                       ),
@@ -480,24 +484,45 @@ class HomeScreen extends GetView<MusicController> {
                 ),
                 title: Text(
                   music.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.black,
                     fontWeight: FontWeight.w500,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 subtitle: Text(
                   music.artistName,
+                  style: TextStyle(
+                    color: Colors.grey[700],
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: Colors.grey[600]),
                 ),
-                trailing: IconButton(
-                  icon: const Icon(Icons.more_vert),
-                  onPressed: () => _showMusicOptions(context, music),
+                trailing: PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert, color: Colors.grey[700]),
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'play':
+                        controller.playMusic(music);
+                        break;
+                      case 'queue':
+                        controller.addToQueue(music);
+                        break;
+                    }
+                  },
+                  itemBuilder: (BuildContext context) => [
+                    PopupMenuItem(
+                      value: 'play',
+                      child: Text('Play Now', style: TextStyle(color: Colors.black)),
+                    ),
+                    PopupMenuItem(
+                      value: 'queue',
+                      child: Text('Add to Queue', style: TextStyle(color: Colors.black)),
+                    ),
+                  ],
                 ),
-                onTap: () => _playMusic(music),
+                onTap: () => controller.playMusic(music),
               );
             },
           );
@@ -542,12 +567,16 @@ class HomeScreen extends GetView<MusicController> {
   }
 
   void _playMusic(Music music) {
-    controller.playMusic(
-      music.youtubeId,
-      music.title,
-      music.artistName,
-      music.youtubeThumbnail,
-    );
+    final musicController = Get.find<MusicController>();
+    musicController.setCurrentQueue(
+        playlist: [music], currentIndex: 0, playlistName: "Now Playing");
+
+    Get.to(() => PlayerScreen(
+          title: music.title,
+          artist: music.artistName,
+          imageUrl: music.youtubeThumbnail,
+          youtubeId: music.youtubeId,
+        ));
   }
 
   Widget _buildGenres() {

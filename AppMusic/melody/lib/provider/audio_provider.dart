@@ -94,7 +94,7 @@ class AudioProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> pause() async {
+  Future<void> pauseAudio() async {
     await _audioHandler?.pause();
     isPlaying = false;
     notifyListeners();
@@ -318,6 +318,39 @@ class AudioProvider extends ChangeNotifier {
       );
     } catch (e) {
       print('Error updating queue: $e');
+    }
+  }
+
+  Future<void> handleTouchEvent() async {
+    try {
+      if (!isPlaying) {
+        await play();
+      } else {
+        await pauseAudio();
+      }
+      notifyListeners();
+    } catch (e) {
+      print('Error handling touch event: $e');
+    }
+  }
+
+  Future<void> play() async {
+    try {
+      await _audioPlayer.play();
+      isPlaying = true;
+      notifyListeners();
+    } catch (e) {
+      print('Error playing audio: $e');
+    }
+  }
+
+  Future<void> pause() async {
+    try {
+      await _audioPlayer.pause();
+      isPlaying = false;
+      notifyListeners();
+    } catch (e) {
+      print('Error pausing audio: $e');
     }
   }
 
