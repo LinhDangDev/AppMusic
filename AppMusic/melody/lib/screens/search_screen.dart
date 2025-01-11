@@ -55,7 +55,7 @@ class _SearchScreenState extends State<SearchScreen> {
     try {
       final results = await _musicService.searchMusic(query);
       setState(() {
-        _searchResults = results;
+        _searchResults = results.cast<SearchResult>();
         _isLoading = false;
       });
     } catch (e) {
@@ -99,7 +99,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   onChanged: (value) => _handleSearch(value),
                 ),
               ),
-              
+
               // Search Results
               Expanded(
                 child: ListView.builder(
@@ -123,7 +123,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   },
                 ),
               ),
-              
+
               // Bottom Navigation
               const BottomPlayerNav(currentIndex: 1),
             ],

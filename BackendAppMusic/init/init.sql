@@ -127,7 +127,7 @@ CREATE TABLE Rankings (
     UNIQUE KEY unique_ranking (region, position)
 );
 
--- Indexes for optimization
+-- Create indexes
 CREATE INDEX idx_music_artist ON Music(artist_id);
 CREATE FULLTEXT INDEX idx_music_search ON Music(title);
 CREATE FULLTEXT INDEX idx_artist_search ON Artists(name);
@@ -137,7 +137,7 @@ CREATE INDEX idx_history_user_date ON Play_History(user_id, played_at);
 CREATE INDEX idx_playlist_songs_position ON Playlist_Songs(playlist_id, position);
 CREATE INDEX idx_rankings_region ON Rankings(region, position);
 
--- Sample data
+-- Insert minimal required data
 INSERT INTO Users (name, email) VALUES
 ('Default User', 'user@example.com');
 
@@ -172,44 +172,6 @@ INSERT INTO Genres (name, description, image_url) VALUES
 ('1980s', 'Music from the 1980s', NULL),
 ('Indie & Alternative', 'Independent and alternative music', NULL);
 
-INSERT INTO Music (title, artist_id) VALUES
-('Sample Song 1', 1),
-('Sample Song 2', 2),
-('Sample Song 3', 3);
-
 INSERT INTO Playlists (name, description, user_id) VALUES
-('My Favorites', 'My favorite songs', 1),
-('Workout Mix', 'Songs for workout', 1);
-
-DELIMITER //
-
-CREATE FUNCTION get_next_position(p_playlist_id INT) 
-RETURNS INT
-DETERMINISTIC
-BEGIN
-    DECLARE next_pos INT;
-    
-    SELECT COALESCE(MAX(position), 0) + 1 
-    INTO next_pos
-    FROM Playlist_Songs 
-    WHERE playlist_id = p_playlist_id;
-    
-    RETURN next_pos;
-END //
-
-DELIMITER ;
-
-INSERT INTO Playlist_Songs (playlist_id, music_id, position) VALUES
-(1, 1, get_next_position(1)),
-(1, 2, get_next_position(1)),
-(2, 3, get_next_position(2));
-
-INSERT INTO Favorites (user_id, music_id) VALUES
-(1, 1),
-(1, 2);
-
-INSERT INTO Play_History (user_id, music_id) VALUES
-(1, 1),
-(1, 2),
-(1, 3);
+('My Favorites', 'My favorite songs', 1);
 

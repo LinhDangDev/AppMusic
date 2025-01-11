@@ -8,8 +8,9 @@ import 'package:melody/provider/audio_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:melody/widgets/mini_player.dart';
 import 'package:melody/screens/library_screen.dart';
+import 'package:melody/provider/music_controller.dart';
 
-class BottomPlayerNav extends StatelessWidget {
+class BottomPlayerNav extends GetView<MusicController> {
   final int currentIndex;
 
   const BottomPlayerNav({
@@ -19,69 +20,60 @@ class BottomPlayerNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AudioProvider>(
-      builder: (context, audioProvider, child) {
-        final bool showMiniPlayer = audioProvider.currentSongTitle != null &&
-            !Navigator.of(context).widget.toString().contains('PlayerScreen');
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Mini Player
+        Obx(() => controller.isMiniPlayerVisible.value && 
+                  controller.currentTitle.value.isNotEmpty && 
+                  controller.currentYoutubeId.value.isNotEmpty
+            ? MiniPlayer(
+                title: controller.currentTitle.value,
+                artist: controller.currentArtist.value,
+                imageUrl: controller.currentImageUrl.value,
+                youtubeId: controller.currentYoutubeId.value,
+                isPlaying: controller.isPlaying.value,
+                onPlayPause: controller.togglePlay,
+              )
+            : const SizedBox.shrink()),
 
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (showMiniPlayer)
-              MiniPlayer(
-                title: audioProvider.currentSongTitle ?? '',
-                artist: audioProvider.currentArtist ?? '',
-                imageUrl: audioProvider.currentImageUrl ?? '',
-                youtubeId: audioProvider.currentYoutubeId ?? '',
-                isPlaying: audioProvider.isPlaying,
-                onPlayPause: () {
-                  if (audioProvider.isPlaying) {
-                    audioProvider.pause();
-                  } else {
-                    audioProvider.resume();
-                  }
-                },
-              ),
-
-            // Bottom Navigation Bar
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.5),
-                borderRadius: BorderRadius.circular(25),
-              ),
-              margin: const EdgeInsets.all(16),
-              child: Theme(
-                data: Theme.of(context).copyWith(
-                  canvasColor: Colors.transparent,
-                ),
-                child: BottomNavigationBar(
-                  backgroundColor: Colors.transparent,
-                  elevation: 0,
-                  selectedItemColor: Colors.white,
-                  unselectedItemColor: Colors.grey,
-                  type: BottomNavigationBarType.fixed,
-                  currentIndex: currentIndex,
-                  items: const [
-                    BottomNavigationBarItem(
-                      icon: Icon(Icons.home, size: 28),
-                      label: 'Home',
-                    ),
-                    BottomNavigationBarItem(
-                      icon: Icon(Icons.search, size: 28),
-                      label: 'Search',
-                    ),
-                    BottomNavigationBarItem(
-                      icon: Icon(Icons.library_music, size: 28),
-                      label: 'Your Library',
-                    ),
-                  ],
-                  onTap: (index) => _handleNavigation(context, index),
-                ),
-              ),
+        // Bottom Navigation Bar
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.5),
+            borderRadius: BorderRadius.circular(25),
+          ),
+          margin: const EdgeInsets.all(16),
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              canvasColor: Colors.transparent,
             ),
-          ],
-        );
-      },
+            child: BottomNavigationBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              selectedItemColor: Colors.white,
+              unselectedItemColor: Colors.grey,
+              type: BottomNavigationBarType.fixed,
+              currentIndex: currentIndex,
+              items: const [
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.home, size: 28),
+                  label: 'Home',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.search, size: 28),
+                  label: 'Search',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.library_music, size: 28),
+                  label: 'Your Library',
+                ),
+              ],
+              onTap: (index) => _handleNavigation(context, index),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

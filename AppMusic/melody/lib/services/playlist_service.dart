@@ -2,9 +2,10 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:melody/models/music.dart';
 import 'package:melody/models/playlist.dart';
+import 'package:melody/constants/api_constants.dart';
 
 class PlaylistService {
-  final String baseUrl = 'http://192.168.102.4:3000';
+  final String baseUrl = ApiConstants.baseUrl;
 
   Future<List<Playlist>> getAllPlaylists() async {
     final response = await http.get(Uri.parse('$baseUrl/api/playlists'));
@@ -90,12 +91,12 @@ class PlaylistService {
         }
         return true;
       }
-      
+
       if (response.body.isNotEmpty) {
         final Map<String, dynamic> errorData = json.decode(response.body);
         print('Delete error data: $errorData');
       }
-      
+
       return false;
     } catch (e) {
       print('Delete playlist error: $e');

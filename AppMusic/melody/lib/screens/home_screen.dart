@@ -15,16 +15,38 @@ import 'package:melody/widgets/genre_card.dart';
 import 'package:melody/models/music.dart';
 import 'package:melody/services/music_service.dart';
 import 'package:melody/provider/music_controller.dart';
+import 'package:melody/widgets/mini_player.dart';
 
 class HomeScreen extends GetView<MusicController> {
   const HomeScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (controller.rankings.isEmpty && controller.selectedRegion.value.isEmpty) {
+        controller.selectedRegion.value = 'VN';
+        controller.loadBiggestHits('VN');
+        controller.loadGenres();
+      }
+    });
+
     return Scaffold(
-      body: Obx(() => controller.isLoading.value
-          ? const Center(child: CircularProgressIndicator())
-          : _buildContent(context)),
+      body: Stack(
+        children: [
+          Obx(() {
+            if (controller.isLoading.value && controller.rankings.isEmpty && controller.biggestHits.isEmpty) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            return _buildContent(context);
+          }),
+          const Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: BottomPlayerNav(currentIndex: 0),
+          ),
+        ],
+      ),
     );
   }
 
@@ -64,12 +86,6 @@ class HomeScreen extends GetView<MusicController> {
                 ),
               ],
             ),
-          ),
-          const Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: BottomPlayerNav(currentIndex: 0),
           ),
         ],
       ),
@@ -226,62 +242,86 @@ class HomeScreen extends GetView<MusicController> {
         SizedBox(
           height: 200,
           child: Obx(() {
+            final musicList = controller.rankings;
+            if (musicList.isEmpty) {
+              return const Center(
+                child: CircularProgressIndicator(),
+              );
+            }
             return ListView.builder(
               scrollDirection: Axis.horizontal,
-              itemCount: controller.allMusic.length,
+              itemCount: musicList.length,
               itemBuilder: (context, index) {
-                final music = controller.allMusic[index];
-                return Padding(
-                  padding: const EdgeInsets.only(right: 16),
-                  child: Container(
-                    width: 180,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(8),
+                final music = musicList[index];
+                return GestureDetector(
+                  onTap: () {
+                    Get.to(() => PlayerScreen(
+                          title: music.title,
+                          artist: music.artistName,
+                          imageUrl: music.youtubeThumbnail,
+                          youtubeId: music.youtubeId,
+                        ));
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 16),
+                    child: Container(
+                      width: 180,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.vertical(
+                              top: Radius.circular(8),
+                            ),
+                            child: Image.network(
+                              music.youtubeThumbnail,
+                              width: double.infinity,
+                              height: 120,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  width: double.infinity,
+                                  height: 120,
+                                  color: Colors.grey[300],
+                                  child: Icon(Icons.music_note),
+                                );
+                              },
+                            ),
                           ),
-                          child: Image.network(
-                            music.youtubeThumbnail,
-                            width: double.infinity,
-                            height: 120,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                music.title,
-                                style: TextStyle(
-                                  color: Colors.black,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  music.title,
+                                  style: TextStyle(
+                                    color: Colors.black,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              SizedBox(height: 4),
-                              Text(
-                                music.artistName,
-                                style: TextStyle(
-                                  color: Colors.grey[600],
-                                  fontSize: 12,
+                                SizedBox(height: 4),
+                                Text(
+                                  music.artistName,
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 12,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 );
@@ -307,6 +347,9 @@ class HomeScreen extends GetView<MusicController> {
         ),
         const SizedBox(height: 16),
         Obx(() {
+          if (controller.rankings.isEmpty) {
+            return const Center(child: CircularProgressIndicator());
+          }
           final itemCount = controller.rankings.length;
           final pageCount =
               (itemCount / 6).ceil(); // Số trang, mỗi trang 6 items (2x3)
@@ -397,6 +440,9 @@ class HomeScreen extends GetView<MusicController> {
         ),
         const SizedBox(height: 16),
         Obx(() {
+          if (controller.biggestHits.isEmpty) {
+            return const Center(child: CircularProgressIndicator());
+          }
           final itemCount = controller.biggestHits.length;
           final pageCount = (itemCount / 6).ceil();
 
@@ -448,31 +494,41 @@ class HomeScreen extends GetView<MusicController> {
         ),
         const SizedBox(height: 16),
         Obx(() {
-          final itemCount = controller.genres.length;
-          final pageCount =
-              (itemCount / 6).ceil(); // Số trang, mỗi trang 6 items (2x3)
+          if (controller.isLoading.value) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+
+          if (controller.genres.isEmpty) {
+            return const Center(
+              child: Text('No genres available'),
+            );
+          }
+
+          final itemsPerPage = 6; // 3 rows × 2 columns
+          final pageCount = (controller.genres.length / itemsPerPage).ceil();
 
           return SizedBox(
             height: 200, // Chiều cao cố định cho 3 hàng
             child: PageView.builder(
               itemCount: pageCount,
               itemBuilder: (context, pageIndex) {
-                return GridView.builder(
-                  physics: NeverScrollableScrollPhysics(),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 8,
-                    mainAxisSpacing: 8,
-                    childAspectRatio: 3,
-                  ),
-                  itemCount: min(
-                      6, itemCount - pageIndex * 6), // Mỗi trang tối đa 6 items
-                  itemBuilder: (context, index) {
-                    final actualIndex = pageIndex * 6 + index;
-                    if (actualIndex >= itemCount) return Container();
-                    final genre = controller.genres[actualIndex];
-                    return GenreCard(genre: genre);
-                  },
+                final startIndex = pageIndex * itemsPerPage;
+                final endIndex =
+                    min(startIndex + itemsPerPage, controller.genres.length);
+                final pageItems =
+                    controller.genres.sublist(startIndex, endIndex);
+
+                return GridView.count(
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 2,
+                  childAspectRatio: 3,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  children: pageItems
+                      .map((genre) => GenreCard(genre: genre))
+                      .toList(),
                 );
               },
             ),
@@ -686,12 +742,14 @@ class RecentMusicCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        Get.to(() => PlayerScreen(
-              title: title,
-              artist: subtitle,
-              imageUrl: imageUrl,
-              youtubeId: youtubeId,
-            ));
+        if (title.isNotEmpty && subtitle.isNotEmpty && imageUrl.isNotEmpty && youtubeId.isNotEmpty) {
+          Get.to(() => PlayerScreen(
+                title: title,
+                artist: subtitle,
+                imageUrl: imageUrl,
+                youtubeId: youtubeId,
+              ));
+        }
       },
       child: Container(
         decoration: BoxDecoration(
