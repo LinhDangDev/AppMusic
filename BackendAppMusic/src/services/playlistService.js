@@ -68,25 +68,29 @@ class PlaylistService {
   }
 
   async addToPlaylist(playlistId, musicId) {
+    const connection = await db.getConnection();
     try {
-      const [playlist] = await db.execute(
-        'SELECT * FROM Playlists WHERE id = ?',
+      await connection.beginTransaction();
+
+      // Lấy position cao nhất hiện tại
+      const [maxPos] = await connection.query(
+        'SELECT MAX(position) as maxPos FROM Playlist_Songs WHERE playlist_id = ?',
         [playlistId]
       );
+      const nextPosition = (maxPos[0].maxPos || 0) + 1;
 
-      if (!playlist.length) {
-        throw createError('Playlist not found', 404);
-      }
-
-      await db.execute(
-        'INSERT INTO Playlist_Songs (playlist_id, music_id) VALUES (?, ?)',
-        [playlistId, musicId]
+      // Thêm bài hát với position mới
+      await connection.query(
+        'INSERT INTO Playlist_Songs (playlist_id, music_id, position) VALUES (?, ?, ?)',
+        [playlistId, musicId, nextPosition]
       );
+
+      await connection.commit();
     } catch (error) {
-      if (error.code === 'ER_DUP_ENTRY') {
-        throw createError('Song already in playlist', 400);
-      }
+      await connection.rollback();
       throw error;
+    } finally {
+      connection.release();
     }
   }
 

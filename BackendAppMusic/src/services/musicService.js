@@ -28,14 +28,15 @@ class MusicService {
           a.name as artist_name,
           a.image_url as artist_image,
           (SELECT COUNT(*) FROM Favorites f WHERE f.music_id = m.id) as favorite_count,
-          GROUP_CONCAT(DISTINCT g.name) as genres
+          GROUP_CONCAT(DISTINCT g.name) as genres,
+          (SELECT SUM(play_duration) FROM Play_History WHERE music_id = m.id) as total_play_duration
         FROM Music m
         LEFT JOIN Artists a ON m.artist_id = a.id
         LEFT JOIN Music_Genres mg ON m.id = mg.music_id
         LEFT JOIN Genres g ON mg.genre_id = g.id
         GROUP BY m.id
-        ORDER BY m.${orderBy}
-        LIMIT ?, ?
+        ORDER BY ${sort === 'popular' ? 'play_count' : 'created_at'} DESC
+        LIMIT ? OFFSET ?
       `, [offsetNum, limitNum]);
 
       // Đếm tổng số bài hát

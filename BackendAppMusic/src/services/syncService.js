@@ -16,8 +16,8 @@ class SyncService {
 
     // Chạy sync mỗi 12 giờ
     if (process.env.ENABLE_CRON_SYNC === 'true') {
-      cron.schedule('5* * * * *', async () => {
-        console.log('Starting scheduled sync...');
+      cron.schedule('*/5 * * * *', async () => {
+        console.log('Starting scheduled sync...', new Date());
         try {
           await this.syncITunesMusic();
           console.log('Scheduled sync completed');
@@ -31,38 +31,62 @@ class SyncService {
     this.initializeRankings();
   }
 
-  async searchYouTubeVideo(query) {
-    try {
-    //   await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+  async searchYouTubeVideo(query, retries = 3) {
+    for (let i = 0; i < retries; i++) {
+      try {
+        // Thêm delay giữa các request
+        if (i > 0) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
 
-      const videos = await YouTube.default.search(query, {
-        limit: 1,
-        type: 'video',
-        safeSearch: true
-      });
+        // Sửa cách gọi YouTube search
+        const videos = await YouTube.default.search(query, {
+          limit: 1,
+          type: 'video',
+          safeSearch: true
+        });
 
-      if (videos && videos.length > 0) {
-        const video = videos[0];
-        return {
-          videoId: video.id,
-          videoUrl: `https://www.youtube.com/watch?v=${video.id}`,
-          thumbnailUrl: video.thumbnail?.url || video.thumbnails[0]?.url
-        };
+        if (videos && videos.length > 0) {
+          const video = videos[0];
+          console.log(`✅ Found YouTube video for: ${query}`);
+          return {
+            videoId: video.id,
+            videoUrl: `https://www.youtube.com/watch?v=${video.id}`,
+            thumbnailUrl: video.thumbnail?.url || video.thumbnails[0]?.url
+          };
+        }
+
+        console.log(`⚠️ No results found for: ${query}`);
+
+      } catch (error) {
+        console.error(`❌ Attempt ${i + 1}/${retries} failed for "${query}":`, error.message);
+
+        // Nếu là lỗi fetch hoặc rate limit, đợi lâu hơn
+        if (error.message.includes('fetch failed') || error.message.includes('rate limit')) {
+          const delay = 5000 * (i + 1);
+          console.log(`Waiting ${delay/1000} seconds before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+
+        // Nếu là lần thử cuối cùng thì return null
+        if (i === retries - 1) {
+          console.error(`❌ All ${retries} attempts failed for "${query}"`);
+          return null;
+        }
       }
-      return null;
-    } catch (error) {
-      console.error('YouTube search error:', error.message);
-      return null;
     }
+    return null;
   }
 
   async updateYouTubeURLs() {
     try {
       console.log('Starting YouTube URL update...');
 
-      // Sửa query để chỉ lấy những bài chưa có URL hoặc thumbnail
+      // Lấy số lượng nhỏ hơn mỗi lần
+      const BATCH_SIZE = 200; // Giảm batch size xuống
+
       const [songs] = await this.retryDbExecute(`
-        SELECT m.id, m.title, a.name as artist_name, m.youtube_url, m.youtube_thumbnail
+        SELECT m.id, m.title, a.name as artist_name
         FROM Music m
         JOIN Artists a ON m.artist_id = a.id
         WHERE m.youtube_url IS NULL
@@ -75,50 +99,29 @@ class SyncService {
       console.log(`Found ${songs.length} songs without YouTube URLs`);
 
       for (const song of songs) {
-        try {
-          // Kiểm tra nếu đã có đủ cả URL và thumbnail thì bỏ qua
-          if (song.youtube_url && song.youtube_thumbnail) {
-            console.log(`⏩ Skipping ${song.title} - already has YouTube data`);
-            continue;
-          }
+        const searchQuery = `${song.title} ${song.artist_name} official audio`;
+        console.log(`\n🔍 Searching for: ${song.title} - ${song.artist_name}`);
 
-          const searchQuery = `${song.title} ${song.artist_name} official audio`;
-          console.log(`🔍 Searching YouTube for: ${searchQuery}`);
+        const videoData = await this.searchYouTubeVideo(searchQuery);
 
-          const videoData = await this.searchYouTubeVideo(searchQuery);
-
-          if (videoData) {
-            await this.retryDbExecute(
-              `UPDATE Music
-               SET youtube_url = ?,
-                   youtube_thumbnail = ?,
-                   updated_at = NOW()
-               WHERE id = ?`,
-              [videoData.videoUrl, videoData.thumbnailUrl, song.id]
-            );
-
-            console.log(`✅ Updated YouTube URL for: ${song.title} - ${song.artist_name}`);
-          } else {
-            console.log(`❌ No YouTube video found for: ${song.title}`);
-          }
-
-          // Thêm delay ngắn hơn vì đã có kiểm tra skip
-          await new Promise(resolve => setTimeout(resolve, 1500));
-        } catch (error) {
-          console.error(`Error updating ${song.title}:`, error.message);
-          continue;
+        if (videoData) {
+          await this.retryDbExecute(
+            `UPDATE Music
+             SET youtube_url = ?,
+                 youtube_thumbnail = ?,
+                 updated_at = NOW()
+             WHERE id = ?`,
+            [videoData.videoUrl, videoData.thumbnailUrl, song.id]
+          );
+          console.log(`✅ Updated: ${song.title}`);
         }
+
+        // Thêm delay giữa các bài hát
+        await new Promise(resolve => setTimeout(resolve, 3000));
       }
 
-      // Thống kê kết quả
-      const [updatedCount] = await this.retryDbExecute(`
-        SELECT COUNT(*) as count
-        FROM Music
-        WHERE youtube_url IS NOT NULL
-        AND youtube_thumbnail IS NOT NULL
-      `);
+      console.log('\nYouTube URL update completed');
 
-      console.log(`Finished updating YouTube URLs. Total songs with YouTube data: ${updatedCount[0].count}`);
     } catch (error) {
       console.error('Error in updateYouTubeURLs:', error);
     }
@@ -213,11 +216,12 @@ class SyncService {
 
   async syncITunesMusic() {
     try {
-      console.log('Starting iTunes music sync...');
+      console.log('Starting iTunes sync process...');
 
-      // Lấy data từ cả 2 thị trường
+      // Sync từ US store
+      console.log('Syncing US iTunes store...');
       for (const url of this.ITUNES_URLS) {
-        console.log(`Fetching data from: ${url}`);
+        console.log(`Fetching from: ${url}`);
         const response = await axios.get(url);
         const songs = response.data.feed.entry;
 
@@ -225,23 +229,74 @@ class SyncService {
           try {
             const title = song['im:name'].label;
             const artistName = song['im:artist'].label;
-
             console.log(`Processing: ${title} - ${artistName}`);
 
-            // ... code xử lý tiếp theo ...
+            // Thêm artist
+            let [artist] = await this.retryDbExecute(
+              'SELECT id FROM Artists WHERE name = ?',
+              [artistName]
+            );
+
+            let artistId;
+            if (!artist.length) {
+              const [result] = await this.retryDbExecute(
+                'INSERT INTO Artists (name) VALUES (?)',
+                [artistName]
+              );
+              artistId = result.insertId;
+              console.log(`Created new artist: ${artistName} (ID: ${artistId})`);
+            } else {
+              artistId = artist[0].id;
+            }
+
+            // Kiểm tra và thêm bài hát
+            const [existingSong] = await this.retryDbExecute(
+              'SELECT id FROM Music WHERE title = ? AND artist_id = ?',
+              [title, artistId]
+            );
+
+            if (!existingSong.length) {
+              const imageUrl = song['im:image'][2].label;
+              const previewUrl = song.link[1]?.attributes?.href;
+
+              await this.retryDbExecute(`
+                INSERT INTO Music (title, artist_id, image_url, preview_url, source, source_id)
+                VALUES (?, ?, ?, ?, 'itunes', ?)
+              `, [
+                title,
+                artistId,
+                imageUrl,
+                previewUrl,
+                song.id.attributes['im:id']
+              ]);
+              console.log(`Added new song: ${title}`);
+
+              // Tìm và thêm YouTube URL ngay sau khi thêm bài hát
+              const searchQuery = `${title} ${artistName} official audio`;
+              const videoData = await this.searchYouTubeVideo(searchQuery);
+              if (videoData) {
+                console.log(`Found YouTube data for: ${title}`);
+                await this.retryDbExecute(
+                  `UPDATE Music
+                   SET youtube_url = ?, youtube_thumbnail = ?
+                   WHERE title = ? AND artist_id = ?`,
+                  [videoData.videoUrl, videoData.thumbnailUrl, title, artistId]
+                );
+              }
+            }
           } catch (error) {
-            console.error(`Error processing song: ${error.message}`);
-            continue;
+            console.error(`Error processing song ${song['im:name'].label}:`, error);
           }
         }
-
-        // Thêm delay nhỏ giữa các request để tránh quá tải
-        await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
-      console.log('iTunes sync completed successfully');
+      console.log('iTunes sync completed');
+
+      // Update YouTube URLs cho những bài chưa có
+      await this.updateYouTubeURLs();
+
     } catch (error) {
-      console.error('iTunes sync failed:', error);
+      console.error('Sync failed:', error);
       throw error;
     }
   }

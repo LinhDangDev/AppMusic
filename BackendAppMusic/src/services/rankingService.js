@@ -49,47 +49,41 @@ class RankingService {
   }
 
   async updateRankings() {
+    const connection = await db.getConnection();
     try {
-      console.log('Starting rankings update...');
-      const connection = await db.getConnection();
-      
-      try {
-        await connection.beginTransaction();
+      await connection.beginTransaction();
 
-        // Xóa rankings cũ
-        await connection.execute('DELETE FROM Rankings');
+      // Xóa rankings cũ
+      await connection.execute('DELETE FROM Rankings');
 
-        // Lấy top songs cho mỗi region dựa trên play_count
-        const regions = ['VN', 'US'];
-        
-        for (const region of regions) {
-          const [songs] = await connection.query(`
-            SELECT id 
-            FROM Music 
-            ORDER BY play_count DESC, created_at DESC
-            LIMIT 100
-          `);
+      // Tính toán rankings mới dựa trên play_count và play_duration
+      const regions = ['VN', 'US'];
+      for (const region of regions) {
+        const [songs] = await connection.query(`
+          SELECT m.id,
+                 (m.play_count * 0.7 + COALESCE(SUM(ph.play_duration), 0) * 0.3) as score
+          FROM Music m
+          LEFT JOIN Play_History ph ON m.id = ph.music_id
+          GROUP BY m.id
+          ORDER BY score DESC
+          LIMIT 100
+        `);
 
-          // Insert rankings mới
-          for (let i = 0; i < songs.length; i++) {
-            await connection.execute(
-              'INSERT INTO Rankings (music_id, region, position) VALUES (?, ?, ?)',
-              [songs[i].id, region, i + 1]
-            );
-          }
+        // Insert rankings mới
+        for (let i = 0; i < songs.length; i++) {
+          await connection.execute(
+            'INSERT INTO Rankings (music_id, region, position) VALUES (?, ?, ?)',
+            [songs[i].id, region, i + 1]
+          );
         }
-
-        await connection.commit();
-        console.log('Rankings updated successfully');
-      } catch (error) {
-        await connection.rollback();
-        throw error;
-      } finally {
-        connection.release();
       }
+
+      await connection.commit();
     } catch (error) {
-      console.error('Error updating rankings:', error);
+      await connection.rollback();
       throw error;
+    } finally {
+      connection.release();
     }
   }
 }

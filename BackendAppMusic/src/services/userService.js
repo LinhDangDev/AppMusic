@@ -36,7 +36,10 @@ class UserService {
           m.title,
           m.image_url,
           a.name as artist_name,
-          ph.played_at
+          ph.played_at,
+          ph.play_duration,
+          ph.source_type,
+          ph.source_id
         FROM Play_History ph
         JOIN Music m ON ph.music_id = m.id
         JOIN Artists a ON m.artist_id = a.id

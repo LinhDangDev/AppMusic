@@ -20,7 +20,7 @@
         "mysql2": "^3.6.5",
         "node-cache": "^5.1.2",
         "node-cron": "^3.0.3",
-        "youtube-sr": "^4.3.10"
+        "youtube-sr": "^4.3.11"
     },
     "devDependencies": {
         "nodemon": "^3.1.9"

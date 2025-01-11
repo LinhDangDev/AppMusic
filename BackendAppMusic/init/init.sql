@@ -9,7 +9,7 @@ CREATE USER 'appmusic'@'%' IDENTIFIED BY 'appmusic123';
 GRANT ALL PRIVILEGES ON app_music.* TO 'appmusic'@'%';
 FLUSH PRIVILEGES;
 
--- Base tables (no dependencies)
+-- Base tables
 CREATE TABLE Users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -40,6 +40,7 @@ CREATE TABLE Music (
     source_id VARCHAR(50),
     youtube_url VARCHAR(255),
     youtube_thumbnail VARCHAR(255),
+    lyrics TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (artist_id) REFERENCES Artists(id)
@@ -54,7 +55,6 @@ CREATE TABLE Genres (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- Dependent tables level 1
 CREATE TABLE Music_Genres (
     music_id INT NOT NULL,
     genre_id INT NOT NULL,
@@ -73,6 +73,40 @@ CREATE TABLE Playlists (
     FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE
 );
 
+CREATE TABLE Playlist_Songs (
+    playlist_id INT,
+    music_id INT,
+    position INT NOT NULL,
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (playlist_id, music_id),
+    FOREIGN KEY (playlist_id) REFERENCES Playlists(id) ON DELETE CASCADE,
+    FOREIGN KEY (music_id) REFERENCES Music(id) ON DELETE CASCADE
+);
+
+CREATE TABLE Queue (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    music_id INT NOT NULL,
+    position INT NOT NULL,
+    queue_type ENUM('manual', 'playlist', 'auto') DEFAULT 'manual',
+    source_id INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES Users(id),
+    FOREIGN KEY (music_id) REFERENCES Music(id)
+);
+
+CREATE TABLE Play_History (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    music_id INT,
+    play_duration INT DEFAULT 0,
+    source_type ENUM('search', 'playlist', 'queue') DEFAULT 'search',
+    source_id INT,
+    played_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE,
+    FOREIGN KEY (music_id) REFERENCES Music(id) ON DELETE CASCADE
+);
+
 CREATE TABLE Favorites (
     user_id INT,
     music_id INT,
@@ -82,25 +116,6 @@ CREATE TABLE Favorites (
     FOREIGN KEY (music_id) REFERENCES Music(id) ON DELETE CASCADE
 );
 
-CREATE TABLE Play_History (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT,
-    music_id INT,
-    played_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE,
-    FOREIGN KEY (music_id) REFERENCES Music(id) ON DELETE CASCADE
-);
-
-CREATE TABLE Playlist_Songs (
-    playlist_id INT,
-    music_id INT,
-    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (playlist_id, music_id),
-    FOREIGN KEY (playlist_id) REFERENCES Playlists(id) ON DELETE CASCADE,
-    FOREIGN KEY (music_id) REFERENCES Music(id) ON DELETE CASCADE
-);
-
--- Thêm bảng Rankings
 CREATE TABLE Rankings (
     id INT AUTO_INCREMENT PRIMARY KEY,
     music_id INT NOT NULL,
@@ -112,11 +127,14 @@ CREATE TABLE Rankings (
     UNIQUE KEY unique_ranking (region, position)
 );
 
--- Indexes
+-- Indexes for optimization
 CREATE INDEX idx_music_artist ON Music(artist_id);
 CREATE FULLTEXT INDEX idx_music_search ON Music(title);
 CREATE FULLTEXT INDEX idx_artist_search ON Artists(name);
 CREATE INDEX idx_music_source ON Music(source, source_id);
+CREATE INDEX idx_queue_user ON Queue(user_id, position);
+CREATE INDEX idx_history_user_date ON Play_History(user_id, played_at);
+CREATE INDEX idx_playlist_songs_position ON Playlist_Songs(playlist_id, position);
 CREATE INDEX idx_rankings_region ON Rankings(region, position);
 
 -- Sample data
@@ -163,10 +181,28 @@ INSERT INTO Playlists (name, description, user_id) VALUES
 ('My Favorites', 'My favorite songs', 1),
 ('Workout Mix', 'Songs for workout', 1);
 
-INSERT INTO Playlist_Songs (playlist_id, music_id) VALUES
-(1, 1),
-(1, 2),
-(2, 3);
+DELIMITER //
+
+CREATE FUNCTION get_next_position(p_playlist_id INT) 
+RETURNS INT
+DETERMINISTIC
+BEGIN
+    DECLARE next_pos INT;
+    
+    SELECT COALESCE(MAX(position), 0) + 1 
+    INTO next_pos
+    FROM Playlist_Songs 
+    WHERE playlist_id = p_playlist_id;
+    
+    RETURN next_pos;
+END //
+
+DELIMITER ;
+
+INSERT INTO Playlist_Songs (playlist_id, music_id, position) VALUES
+(1, 1, get_next_position(1)),
+(1, 2, get_next_position(1)),
+(2, 3, get_next_position(2));
 
 INSERT INTO Favorites (user_id, music_id) VALUES
 (1, 1),
