@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:melody/screens/player_screen.dart';
 import 'package:melody/screens/home_screen.dart';
 import 'package:melody/screens/search_screen.dart';
 import 'package:melody/screens/library_screen.dart';
 import 'package:get/get.dart';
-import 'package:melody/provider/audio_provider.dart';
-import 'package:provider/provider.dart';
+
 import 'package:melody/widgets/mini_player.dart';
-import 'package:melody/screens/library_screen.dart';
+
 import 'package:melody/provider/music_controller.dart';
 
 class BottomPlayerNav extends GetView<MusicController> {
@@ -24,17 +22,9 @@ class BottomPlayerNav extends GetView<MusicController> {
       mainAxisSize: MainAxisSize.min,
       children: [
         // Mini Player
-        Obx(() => controller.isMiniPlayerVisible.value && 
-                  controller.currentTitle.value.isNotEmpty && 
-                  controller.currentYoutubeId.value.isNotEmpty
-            ? MiniPlayer(
-                title: controller.currentTitle.value,
-                artist: controller.currentArtist.value,
-                imageUrl: controller.currentImageUrl.value,
-                youtubeId: controller.currentYoutubeId.value,
-                isPlaying: controller.isPlaying.value,
-                onPlayPause: controller.togglePlay,
-              )
+        Obx(() => controller.showMiniPlayer.value &&
+                controller.currentTitle.value.isNotEmpty
+            ? const MiniPlayer()
             : const SizedBox.shrink()),
 
         // Bottom Navigation Bar

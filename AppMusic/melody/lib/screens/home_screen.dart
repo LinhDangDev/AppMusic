@@ -5,17 +5,11 @@ import 'package:flutter/rendering.dart';
 import 'dart:ui';
 import 'package:get/get.dart';
 import 'player_screen.dart';
-import 'search_screen.dart';
-import 'library_screen.dart';
-import 'premium_screen.dart';
 import 'package:melody/constants/app_colors.dart';
 import 'package:melody/widgets/bottom_player_nav.dart';
 import 'package:melody/models/genre.dart';
-import 'package:melody/widgets/genre_card.dart';
 import 'package:melody/models/music.dart';
-import 'package:melody/services/music_service.dart';
 import 'package:melody/provider/music_controller.dart';
-import 'package:melody/widgets/mini_player.dart';
 
 class HomeScreen extends GetView<MusicController> {
   const HomeScreen({Key? key}) : super(key: key);
@@ -23,7 +17,8 @@ class HomeScreen extends GetView<MusicController> {
   @override
   Widget build(BuildContext context) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (controller.rankings.isEmpty && controller.selectedRegion.value.isEmpty) {
+      if (controller.rankings.isEmpty &&
+          controller.selectedRegion.value.isEmpty) {
         controller.selectedRegion.value = 'VN';
         controller.loadBiggestHits('VN');
         controller.loadGenres();
@@ -34,7 +29,9 @@ class HomeScreen extends GetView<MusicController> {
       body: Stack(
         children: [
           Obx(() {
-            if (controller.isLoading.value && controller.rankings.isEmpty && controller.biggestHits.isEmpty) {
+            if (controller.isLoading.value &&
+                controller.rankings.isEmpty &&
+                controller.biggestHits.isEmpty) {
               return const Center(child: CircularProgressIndicator());
             }
             return _buildContent(context);
@@ -70,14 +67,12 @@ class HomeScreen extends GetView<MusicController> {
                       bottom: 140.0,
                     ),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SizedBox(height: 10),
-                        _buildRecentlyPlayed(context),
-                        const SizedBox(height: 15),
-                        _buildPlaylists(context),
+                        _buildGetYouStarted(context),
                         const SizedBox(height: 32),
                         _buildBiggestHits(context),
+                        const SizedBox(height: 32),
+                        _buildRecentlyPlayed(context),
                         const SizedBox(height: 32),
                         _buildGenres(),
                       ],
@@ -226,7 +221,7 @@ class HomeScreen extends GetView<MusicController> {
     );
   }
 
-  Widget _buildPlaylists(BuildContext context) {
+  Widget _buildGetYouStarted(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -242,86 +237,72 @@ class HomeScreen extends GetView<MusicController> {
         SizedBox(
           height: 200,
           child: Obx(() {
-            final musicList = controller.rankings;
-            if (musicList.isEmpty) {
-              return const Center(
-                child: CircularProgressIndicator(),
-              );
+            if (controller.randomMusic.isEmpty) {
+              return const Center(child: CircularProgressIndicator());
             }
+
             return ListView.builder(
               scrollDirection: Axis.horizontal,
-              itemCount: musicList.length,
+              itemCount: controller.randomMusic.length,
               itemBuilder: (context, index) {
-                final music = musicList[index];
+                final music = controller.randomMusic[index];
                 return GestureDetector(
-                  onTap: () {
-                    Get.to(() => PlayerScreen(
-                          title: music.title,
-                          artist: music.artistName,
-                          imageUrl: music.youtubeThumbnail,
-                          youtubeId: music.youtubeId,
-                        ));
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 16),
-                    child: Container(
-                      width: 180,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[200],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.vertical(
-                              top: Radius.circular(8),
-                            ),
-                            child: Image.network(
-                              music.youtubeThumbnail,
+                  onTap: () => _playMusic(music),
+                  child: Container(
+                    width: 160,
+                    margin: const EdgeInsets.only(right: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ClipRRect(
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(8),
+                          ),
+                          child: Image.network(
+                            music.youtubeThumbnail,
+                            width: double.infinity,
+                            height: 120,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
                               width: double.infinity,
                               height: 120,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  width: double.infinity,
-                                  height: 120,
-                                  color: Colors.grey[300],
-                                  child: Icon(Icons.music_note),
-                                );
-                              },
+                              color: Colors.grey[300],
+                              child: const Icon(Icons.music_note),
                             ),
                           ),
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  music.title,
-                                  style: TextStyle(
-                                    color: Colors.black,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                music.title,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
                                 ),
-                                SizedBox(height: 4),
-                                Text(
-                                  music.artistName,
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 12,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                music.artistName,
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontSize: 12,
                                 ),
-                              ],
-                            ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 );
@@ -330,6 +311,15 @@ class HomeScreen extends GetView<MusicController> {
           }),
         ),
       ],
+    );
+  }
+
+  Widget _buildPlaceholderImage() {
+    return Container(
+      width: double.infinity,
+      height: 120,
+      color: Colors.grey[300],
+      child: const Icon(Icons.music_note),
     );
   }
 
@@ -404,20 +394,20 @@ class HomeScreen extends GetView<MusicController> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            // Dropdown chọn region
             Container(
               decoration: BoxDecoration(
                 color: Colors.grey[200],
                 borderRadius: BorderRadius.circular(16),
               ),
-              padding: EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Obx(() => DropdownButton<String>(
                     value: controller.selectedRegion.value,
                     dropdownColor: Colors.grey[200],
-                    underline: Container(), // Bỏ đường gạch chân
-                    style: TextStyle(color: Colors.black),
-                    icon: Icon(Icons.arrow_drop_down, color: Colors.black),
-                    items: [
+                    underline: Container(),
+                    style: const TextStyle(color: Colors.black),
+                    icon:
+                        const Icon(Icons.arrow_drop_down, color: Colors.black),
+                    items: const [
                       DropdownMenuItem(
                         value: 'VN',
                         child: Text('Vietnam',
@@ -431,6 +421,7 @@ class HomeScreen extends GetView<MusicController> {
                     ],
                     onChanged: (String? newValue) {
                       if (newValue != null) {
+                        controller.selectedRegion.value = newValue;
                         controller.loadBiggestHits(newValue);
                       }
                     },
@@ -440,44 +431,123 @@ class HomeScreen extends GetView<MusicController> {
         ),
         const SizedBox(height: 16),
         Obx(() {
-          if (controller.biggestHits.isEmpty) {
+          if (controller.rankings.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
-          final itemCount = controller.biggestHits.length;
-          final pageCount = (itemCount / 6).ceil();
 
-          return SizedBox(
-            height: 200,
-            child: PageView.builder(
-              itemCount: pageCount,
-              itemBuilder: (context, pageIndex) {
-                return GridView.builder(
-                  physics: NeverScrollableScrollPhysics(),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 8,
-                    mainAxisSpacing: 8,
-                    childAspectRatio: 3,
+          return ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: min(10, controller.rankings.length),
+            itemBuilder: (context, index) {
+              final music = controller.rankings[index];
+              return ListTile(
+                contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                leading: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 30,
+                      child: Text(
+                        '#${music.position}',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: (music.position ?? 0) <= 3
+                              ? Colors.blue
+                              : Colors.grey,
+                        ),
+                      ),
+                    ),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        music.youtubeThumbnail,
+                        width: 50,
+                        height: 50,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            width: 50,
+                            height: 50,
+                            color: Colors.grey[300],
+                            child: const Icon(Icons.music_note),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                title: Text(
+                  music.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.w500,
                   ),
-                  itemCount: min(6, itemCount - pageIndex * 6),
-                  itemBuilder: (context, index) {
-                    final actualIndex = pageIndex * 6 + index;
-                    if (actualIndex >= itemCount) return Container();
-                    final music = controller.biggestHits[actualIndex];
-                    return RecentMusicCard(
-                      imageUrl: music.youtubeThumbnail,
-                      title: music.title,
-                      subtitle: music.artistName,
-                      youtubeId: music.youtubeId,
-                    );
-                  },
-                );
-              },
-            ),
+                ),
+                subtitle: Text(
+                  music.artistName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Colors.grey[600]),
+                ),
+                trailing: IconButton(
+                  icon: const Icon(Icons.more_vert),
+                  onPressed: () => _showMusicOptions(context, music),
+                ),
+                onTap: () => _playMusic(music),
+              );
+            },
           );
         }),
       ],
     );
+  }
+
+  void _showMusicOptions(BuildContext context, Music music) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.play_arrow),
+              title: const Text('Play Now'),
+              onTap: () {
+                Get.back();
+                _playMusic(music);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.queue_music),
+              title: const Text('Add to Queue'),
+              onTap: () {
+                controller.addToQueue(music);
+                Get.back();
+                Get.snackbar(
+                  'Added to Queue',
+                  music.title,
+                  snackPosition: SnackPosition.BOTTOM,
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _playMusic(Music music) {
+    Get.to(() => PlayerScreen(
+          title: music.title,
+          artist: music.artistName,
+          imageUrl: music.youtubeThumbnail,
+          youtubeId: music.youtubeId,
+        ));
   }
 
   Widget _buildGenres() {
@@ -537,6 +607,121 @@ class HomeScreen extends GetView<MusicController> {
       ],
     );
   }
+
+  Widget _buildRankings() {
+    return Obx(() {
+      if (controller.rankings.isEmpty) {
+        return const Center(child: CircularProgressIndicator());
+      }
+
+      return ListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: controller.rankings.length,
+        itemBuilder: (context, index) {
+          final music = controller.rankings[index];
+          return ListTile(
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(
+                music.youtubeThumbnail,
+                width: 50,
+                height: 50,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    width: 50,
+                    height: 50,
+                    color: Colors.grey[800],
+                    child: const Icon(Icons.music_note, color: Colors.white),
+                  );
+                },
+              ),
+            ),
+            title: Text(
+              music.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              music.artistName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            onTap: () async {
+              try {
+                final musicController = Get.find<MusicController>();
+
+                // Cập nhật queue với danh sách rankings
+                musicController.currentQueue.assignAll(controller.rankings);
+                musicController.currentQueueIndex.value = index;
+
+                // Mở player screen
+                Get.to(
+                  () => PlayerScreen(
+                    title: music.title,
+                    artist: music.artistName,
+                    imageUrl: music.youtubeThumbnail,
+                    youtubeId: music.youtubeId,
+                  ),
+                );
+
+                // Phát nhạc
+                await musicController.playMusicDirectly(music);
+              } catch (e) {
+                print('Error playing ranking music: $e');
+                Get.snackbar(
+                  'Error',
+                  'Failed to play music. Please try again.',
+                  backgroundColor: Colors.red.withOpacity(0.7),
+                  colorText: Colors.white,
+                );
+              }
+            },
+          );
+        },
+      );
+    });
+  }
+
+  void _navigateToPlayer(Music song) async {
+    final controller = Get.find<MusicController>();
+
+    // Thêm vào queue và cập nhật index
+    controller.currentQueue.add(song);
+    controller.currentQueueIndex.value = controller.currentQueue.length - 1;
+
+    // Chuyển đến màn hình player
+    Get.to(() => PlayerScreen(
+          title: song.title,
+          artist: song.artistName,
+          imageUrl: song.youtubeThumbnail,
+          youtubeId: song.youtubeId,
+        ));
+
+    // Phát nhạc
+    await controller.loadAndPlayMusic(song);
+  }
+
+  Widget _buildImage(String? imageUrl) {
+    if (imageUrl == null || imageUrl.isEmpty) {
+      return Container(
+        color: Colors.grey[800],
+        child: Icon(Icons.music_note, color: Colors.white),
+      );
+    }
+
+    return Image.network(
+      imageUrl,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) {
+        return Container(
+          color: Colors.grey[800],
+          child: Icon(Icons.music_note, color: Colors.white),
+        );
+      },
+    );
+  }
 }
 
 class SectionTitle extends StatelessWidget {
@@ -565,7 +750,7 @@ class MusicCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final String youtubeId;
-  final bool isCompact; // Thêm prop để phân biệt kiểu hiển thị
+  final bool isCompact;
 
   const MusicCard({
     Key? key,
@@ -573,7 +758,7 @@ class MusicCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.youtubeId,
-    this.isCompact = false, // Mặc định là false cho horizontal scroll
+    this.isCompact = false,
   }) : super(key: key);
 
   @override
@@ -582,12 +767,64 @@ class MusicCard extends StatelessWidget {
       // Layout cho grid view (Recently played)
       return GestureDetector(
         onTap: () {
+          final music = Music(
+            id: '', // Có thể để trống hoặc tạo một ID ngẫu nhiên
+            title: title,
+            artistName: subtitle,
+            youtubeId: youtubeId,
+            youtubeThumbnail: imageUrl,
+          );
+
+          final controller = Get.find<MusicController>();
+          // Thêm vào queue và cập nhật index
+          controller.currentQueue.add(music);
+          controller.currentQueueIndex.value =
+              controller.currentQueue.length - 1;
+
+          // Chuyển đến màn hình player
           Get.to(() => PlayerScreen(
-                title: title,
-                artist: subtitle,
-                imageUrl: imageUrl,
-                youtubeId: youtubeId,
+                title: music.title,
+                artist: music.artistName,
+                imageUrl: music.youtubeThumbnail,
+                youtubeId: music.youtubeId,
               ));
+
+          // Phát nhạc
+          controller.loadAndPlayMusic(music);
+        },
+        onLongPress: () {
+          showModalBottomSheet(
+            context: context,
+            builder: (context) => Container(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(
+                    leading: Icon(Icons.queue_music),
+                    title: Text('Thêm vào hàng chờ'),
+                    onTap: () {
+                      final musicController = Get.find<MusicController>();
+                      musicController.addToQueue(Music(
+                        id: '',
+                        title: title,
+                        artistName: subtitle,
+                        // displayImage: imageUrl,
+                        youtubeId: youtubeId,
+                        youtubeThumbnail: imageUrl,
+                      ));
+                      Get.back();
+                      Get.snackbar(
+                        'Đã thêm vào hàng chờ',
+                        title,
+                        snackPosition: SnackPosition.BOTTOM,
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          );
         },
         child: Container(
           decoration: BoxDecoration(
@@ -742,13 +979,32 @@ class RecentMusicCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        if (title.isNotEmpty && subtitle.isNotEmpty && imageUrl.isNotEmpty && youtubeId.isNotEmpty) {
+        if (title.isNotEmpty &&
+            subtitle.isNotEmpty &&
+            imageUrl.isNotEmpty &&
+            youtubeId.isNotEmpty) {
+          final music = Music(
+            id: '',
+            title: title,
+            artistName: subtitle,
+            youtubeThumbnail: imageUrl,
+            youtubeId: youtubeId,
+          );
+
+          final controller = Get.find<MusicController>();
+          controller.currentQueue.add(music);
+          controller.currentQueueIndex.value =
+              controller.currentQueue.length - 1;
+
           Get.to(() => PlayerScreen(
-                title: title,
-                artist: subtitle,
-                imageUrl: imageUrl,
-                youtubeId: youtubeId,
+                title: music.title,
+                artist: music.artistName,
+                imageUrl: music.youtubeThumbnail,
+                youtubeId: music.youtubeId,
               ));
+
+          // Phát nhạc
+          controller.loadAndPlayMusic(music);
         }
       },
       child: Container(
@@ -768,14 +1024,15 @@ class RecentMusicCard extends StatelessWidget {
                 height: 55,
                 child: Image.network(
                   imageUrl,
+                  width: 56,
+                  height: 56,
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      color: Colors.grey[800],
-                      child:
-                          Icon(Icons.music_note, color: Colors.white, size: 24),
-                    );
-                  },
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    width: 56,
+                    height: 56,
+                    color: Colors.grey[800],
+                    child: Icon(Icons.music_note, color: Colors.white),
+                  ),
                 ),
               ),
             ),

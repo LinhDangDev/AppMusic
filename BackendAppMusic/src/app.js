@@ -36,8 +36,17 @@ const startServer = async () => {
     await connectWithRetry();
 
     // Khởi động server
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`🚀 Server is running on port ${PORT}`);
+    });
+
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(`Port ${PORT} is already in use. Please use another port.`);
+        process.exit(1);
+      } else {
+        throw err;
+      }
     });
 
     // Chạy sync data sau khi server đã khởi động

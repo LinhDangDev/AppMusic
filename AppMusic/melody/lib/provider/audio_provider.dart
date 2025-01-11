@@ -62,7 +62,8 @@ class AudioProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> playYoutubeAudio(String youtubeId, {
+  Future<void> playYoutubeAudio(
+    String youtubeId, {
     required String title,
     required String artist,
     required String imageUrl,
@@ -124,52 +125,40 @@ class AudioProvider extends ChangeNotifier {
 
   Future<void> playNext() async {
     final musicController = Get.find<MusicController>();
-    final queueLength = musicController.currentQueue.length;
     
-    if (queueLength == 0) return;
-
-    int nextIndex;
-    
-    if (isShuffleEnabled || isSmartShuffleEnabled) {
-      currentShuffleIndex++;
-      if (currentShuffleIndex >= shuffledIndices.length) {
-        if (repeatMode == RepeatMode.all) {
-          currentShuffleIndex = 0;
-        } else {
-          return;
-        }
-      }
-      nextIndex = shuffledIndices[currentShuffleIndex];
-    } else {
-      nextIndex = musicController.currentQueueIndex.value + 1;
-      if (nextIndex >= queueLength) {
+    if (musicController.isQueueMode.value) {
+      int nextIndex = musicController.currentQueueIndex.value + 1;
+      
+      // Kiểm tra repeat mode trước khi reset về 0
+      if (nextIndex >= musicController.currentQueue.length) {
         if (repeatMode == RepeatMode.all) {
           nextIndex = 0;
         } else {
           return;
         }
       }
-    }
 
-    final nextMusic = musicController.currentQueue[nextIndex];
-    await playYoutubeAudio(
-      nextMusic.youtubeId,
-      title: nextMusic.title,
-      artist: nextMusic.artistName,
-      imageUrl: nextMusic.youtubeThumbnail,
-    );
-    
-    musicController.currentQueueIndex.value = nextIndex;
+      final nextSong = musicController.currentQueue[nextIndex];
+      musicController.currentQueueIndex.value = nextIndex;
+      musicController.currentMusic.value = nextSong;
+
+      await playYoutubeAudio(
+        nextSong.youtubeId,
+        title: nextSong.title,
+        artist: nextSong.artistName,
+        imageUrl: nextSong.youtubeThumbnail,
+      );
+    }
   }
 
   Future<void> playPrevious() async {
     final musicController = Get.find<MusicController>();
     final queueLength = musicController.currentQueue.length;
-    
+
     if (queueLength == 0) return;
 
     int previousIndex;
-    
+
     if (isShuffleEnabled || isSmartShuffleEnabled) {
       currentShuffleIndex--;
       if (currentShuffleIndex < 0) {
@@ -198,7 +187,7 @@ class AudioProvider extends ChangeNotifier {
       artist: previousMusic.artistName,
       imageUrl: previousMusic.youtubeThumbnail,
     );
-    
+
     musicController.currentQueueIndex.value = previousIndex;
   }
 
@@ -224,52 +213,49 @@ class AudioProvider extends ChangeNotifier {
   // Thêm method để toggle shuffle thường
   void toggleShuffle() {
     final musicController = Get.find<MusicController>();
-    
+
     if (isSmartShuffleEnabled) {
       // Nếu đang bật smart shuffle thì tắt nó trước
       isSmartShuffleEnabled = false;
     }
-    
+
     isShuffleEnabled = !isShuffleEnabled;
-    
+
     if (isShuffleEnabled) {
       // Tạo danh sách index ngẫu nhiên
-      shuffledIndices = List.generate(
-        musicController.currentQueue.length, 
-        (index) => index
-      );
+      shuffledIndices =
+          List.generate(musicController.currentQueue.length, (index) => index);
       shuffledIndices.shuffle();
-      
+
       // Đặt vị trí hiện tại vào đầu danh sách
       int currentIndex = musicController.currentQueueIndex.value;
       shuffledIndices.remove(currentIndex);
       shuffledIndices.insert(0, currentIndex);
       currentShuffleIndex = 0;
     }
-    
+
     notifyListeners();
   }
 
   // Thêm method để toggle smart shuffle
   void toggleSmartShuffle() {
     final musicController = Get.find<MusicController>();
-    
+
     if (isShuffleEnabled) {
       // Nếu đang bật shuffle thường thì tắt nó trước
       isShuffleEnabled = false;
     }
-    
+
     isSmartShuffleEnabled = !isSmartShuffleEnabled;
-    
+
     if (isSmartShuffleEnabled) {
       // Tạo danh sách index theo thuật toán thông minh
       shuffledIndices = _generateSmartShuffleOrder(
-        musicController.currentQueue.length,
-        musicController.currentQueueIndex.value
-      );
+          musicController.currentQueue.length,
+          musicController.currentQueueIndex.value);
       currentShuffleIndex = 0;
     }
-    
+
     notifyListeners();
   }
 
@@ -277,57 +263,58 @@ class AudioProvider extends ChangeNotifier {
   List<int> _generateSmartShuffleOrder(int totalSongs, int currentIndex) {
     List<int> indices = List.generate(totalSongs, (index) => index);
     indices.remove(currentIndex);
-    
+
     // Chia playlist thành các nhóm
     int groupSize = (totalSongs / 3).ceil();
     List<List<int>> groups = [];
-    
+
     // Nhóm 1: Các bài gần với bài hiện tại
-    List<int> nearbySongs = indices.where((i) => 
-      (i - currentIndex).abs() <= groupSize
-    ).toList();
+    List<int> nearbySongs =
+        indices.where((i) => (i - currentIndex).abs() <= groupSize).toList();
     nearbySongs.shuffle();
     groups.add(nearbySongs);
-    
+
     // Nhóm 2: Các bài ở giữa
-    List<int> middleSongs = indices.where((i) =>
-      (i - currentIndex).abs() > groupSize && 
-      (i - currentIndex).abs() <= groupSize * 2
-    ).toList();
+    List<int> middleSongs = indices
+        .where((i) =>
+            (i - currentIndex).abs() > groupSize &&
+            (i - currentIndex).abs() <= groupSize * 2)
+        .toList();
     middleSongs.shuffle();
     groups.add(middleSongs);
-    
+
     // Nhóm 3: Các bài xa nhất
-    List<int> farSongs = indices.where((i) =>
-      (i - currentIndex).abs() > groupSize * 2
-    ).toList();
+    List<int> farSongs =
+        indices.where((i) => (i - currentIndex).abs() > groupSize * 2).toList();
     farSongs.shuffle();
     groups.add(farSongs);
-    
+
     // Ghép các nhóm lại, đặt bài hiện tại lên đầu
     List<int> result = [currentIndex];
     for (var group in groups) {
       result.addAll(group);
     }
-    
+
     return result;
   }
 
   Future<void> updateQueue(List<Map<String, String>> queue, int index) async {
     try {
       final musicController = Get.find<MusicController>();
-      
+
       // Cập nhật queue trong MusicController
       musicController.currentQueue.clear();
-      musicController.currentQueue.addAll(queue.map((song) => Music(
-        id: '', // Có thể bỏ qua vì không cần thiết cho việc phát nhạc
-        title: song['title']!,
-        artistName: song['artist']!,
-        displayImage: song['imageUrl']!,
-        youtubeId: song['youtubeId']!,
-        youtubeThumbnail: song['imageUrl']!,
-      )).toList());
-      
+      musicController.currentQueue.addAll(queue
+          .map((song) => Music(
+                id: '', // Có thể bỏ qua vì không cần thiết cho việc phát nhạc
+                title: song['title']!,
+                artistName: song['artist']!,
+                // displayImage: song['imageUrl']!,
+                youtubeId: song['youtubeId']!,
+                youtubeThumbnail: song['imageUrl']!,
+              ))
+          .toList());
+
       musicController.currentQueueIndex.value = index;
 
       // Phát bài hát được chọn

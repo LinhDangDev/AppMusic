@@ -1,12 +1,19 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'dart:ui';
 import 'package:get/get.dart';
-import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:melody/models/music.dart';
 import 'package:melody/screens/Queue_screen.dart';
 import 'package:melody/provider/music_controller.dart';
 import 'package:melody/constants/api_constants.dart';
+import 'package:melody/services/music_service.dart';
+
+enum RepeatMode {
+  off,
+  one,
+  all,
+}
 
 class PlayerScreen extends GetView<MusicController> {
   final String title;
@@ -14,45 +21,47 @@ class PlayerScreen extends GetView<MusicController> {
   final String imageUrl;
   final String youtubeId;
 
-  const PlayerScreen({
+  PlayerScreen({
     Key? key,
     required this.title,
     required this.artist,
     required this.imageUrl,
     required this.youtubeId,
-  }) : super(key: key);
+  }) : super(key: key) {
+    if (controller.currentMusic.value == null ||
+        controller.currentMusic.value?.youtubeId != youtubeId) {
+      controller.updateCurrentTrack(title, artist, imageUrl, youtubeId);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      controller.changeMusic(youtubeId, title, artist, imageUrl);
-    });
-
     return WillPopScope(
       onWillPop: () async {
-        controller.toggleMiniPlayer(true);
-        Get.back();
+        controller.minimizePlayer();
         return false;
       },
       child: Scaffold(
         body: Stack(
           children: [
             // Background với thumbnail được blur
-            Container(
-              decoration: BoxDecoration(
-                image: DecorationImage(
-                  image: NetworkImage(imageUrl),
-                  fit: BoxFit.cover,
-                ),
-              ),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                child: Container(
-                  color: Colors.black.withOpacity(0.3),
-                ),
-              ),
-            ),
-            // Content
+            Obx(() => Container(
+                  decoration: BoxDecoration(
+                    image: DecorationImage(
+                      image: NetworkImage(controller.currentImageUrl.value),
+                      fit: BoxFit.cover,
+                      onError: (exception, stackTrace) =>
+                          const AssetImage('assets/images/logo.png'),
+                    ),
+                  ),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: Container(
+                      color: Colors.black.withOpacity(0.3),
+                    ),
+                  ),
+                )),
+            // Gradient overlay
             Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -93,7 +102,7 @@ class PlayerScreen extends GetView<MusicController> {
           IconButton(
             icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white),
             onPressed: () {
-              controller.toggleMiniPlayer(true);
+              controller.showMiniPlayer.value = true;
               Get.back();
             },
           ),
@@ -148,17 +157,32 @@ class PlayerScreen extends GetView<MusicController> {
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: Image.network(
-              imageUrl,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  color: Colors.grey[900],
-                  child: const Icon(Icons.music_note,
-                      color: Colors.white, size: 64),
-                );
-              },
-            ),
+            child: Obx(() {
+              final imageUrl = controller.currentImageUrl.value;
+              return Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    color: Colors.grey[900],
+                    child: const Icon(
+                      Icons.music_note,
+                      color: Colors.white,
+                      size: 64,
+                    ),
+                  );
+                },
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return Container(
+                    color: Colors.grey[900],
+                    child: const Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                },
+              );
+            }),
           ),
         ),
       ),
@@ -174,26 +198,26 @@ class PlayerScreen extends GetView<MusicController> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                Obx(() => Text(
+                      controller.currentTitle.value,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    )),
                 const SizedBox(height: 8),
-                Text(
-                  artist,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
-                    fontSize: 16,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                Obx(() => Text(
+                      controller.currentArtist.value,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 16,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    )),
               ],
             ),
           ),
@@ -320,7 +344,7 @@ class PlayerScreen extends GetView<MusicController> {
               ),
               IconButton(
                 icon: const Icon(Icons.queue_music, color: Colors.white),
-                onPressed: () => Get.to(() => const QueueScreen()),
+                onPressed: () => Get.to(() => QueueScreen()),
               ),
             ],
           ),
@@ -395,7 +419,6 @@ class PlayerScreen extends GetView<MusicController> {
                   style: TextStyle(color: Colors.black)),
               onTap: () {
                 Get.back();
-                // controller.addToQueue(youtubeId, title, artist, imageUrl);
                 Get.snackbar(
                   'Added to Queue',
                   'Song added to queue',
@@ -444,7 +467,8 @@ class PlayerScreen extends GetView<MusicController> {
   void _addToFavorites() async {
     try {
       final response = await http.post(
-        Uri.parse('${ApiConstants.baseUrl}/api/users/me/favorites/$youtubeId'),
+        Uri.parse(
+            '${ApiConstants.baseUrl}/api/users/me/favorites/${youtubeId}'),
         headers: {'Content-Type': 'application/json'},
       );
 

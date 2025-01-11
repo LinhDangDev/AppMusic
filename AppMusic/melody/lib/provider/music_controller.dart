@@ -5,8 +5,9 @@ import 'package:melody/models/genre.dart';
 import 'package:melody/models/music.dart';
 import 'package:melody/services/music_service.dart';
 import 'package:melody/screens/player_screen.dart';
-import 'package:melody/widgets/mini_player.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
+import 'package:dio/dio.dart';
+import 'package:melody/constants/api_constants.dart';
 
 enum RepeatMode {
   off,
@@ -26,10 +27,10 @@ class MusicController extends GetxController {
   final RxList<Music> currentQueue = <Music>[].obs;
   final RxInt currentQueueIndex = 0.obs;
   final RxString currentPlaylistName = ''.obs;
-  var currentYoutubeId = ''.obs;
-  var currentTitle = ''.obs;
-  var currentArtist = ''.obs;
-  var currentImageUrl = ''.obs;
+  final RxString currentYoutubeId = ''.obs;
+  final RxString currentTitle = ''.obs;
+  final RxString currentArtist = ''.obs;
+  final RxString currentImageUrl = ''.obs;
   var isChangingAudio = false.obs;
   var duration = Duration.zero.obs;
   var position = Duration.zero.obs;
@@ -38,7 +39,14 @@ class MusicController extends GetxController {
   var isShuffleEnabled = false.obs;
   var isSmartShuffleEnabled = false.obs;
   var repeatMode = RepeatMode.off.obs;
-  final isMiniPlayerVisible = false.obs;
+  final RxBool isQueueMode = false.obs;
+  final _yt = YoutubeExplode();
+  final currentMusic = Rx<Music?>(null);
+  final RxBool isLoadingRankings = true.obs;
+  final Dio dio = Dio();
+  final RxList<Music> startedMusic = <Music>[].obs;
+  final RxList<Music> randomMusic = <Music>[].obs;
+  final Rx<Music?> currentSong = Rx<Music?>(null);
 
   @override
   void onInit() {
@@ -48,12 +56,30 @@ class MusicController extends GetxController {
     loadGenres();
     loadData();
     _initAudioPlayer();
+    loadRandomMusic();
+    // Xử lý các sự kiện của audioPlayer
+    audioPlayer.playerStateStream.listen((state) {
+      if (state.processingState == ProcessingState.completed) {
+        playNext();
+      }
+    });
+
+    // Xử lý lỗi
+    audioPlayer.playbackEventStream.listen(
+      (event) {},
+      onError: (Object e, StackTrace st) {
+        print('A stream error occurred: $e');
+      },
+    );
+
+    loadRandomMusic();
   }
 
   @override
   void onClose() {
     audioPlayer.dispose();
     _musicService.dispose();
+    _yt.close();
     super.onClose();
   }
 
@@ -99,12 +125,59 @@ class MusicController extends GetxController {
 
   Future<void> loadBiggestHits(String region) async {
     try {
-      final hits = await _musicService.getMusicRankings(region);
-      biggestHits.assignAll(hits);
-      selectedRegion.value = region;
+      isLoadingRankings.value = true;
+      final response =
+          await dio.get('${ApiConstants.baseUrl}/api/music/rankings/$region');
+
+      if (response.statusCode == 200 && response.data['status'] == 'success') {
+        final rankingsData = response.data['data']['rankings'] as List;
+        rankings.clear();
+        rankings.addAll(rankingsData.map((song) {
+          String youtubeId = _extractYoutubeId(song['youtube_url'] ?? '');
+          String thumbnail = song['youtube_thumbnail'] ?? '';
+
+          // Tạo thumbnail URL nếu chưa có
+          if (thumbnail.isEmpty && youtubeId.isNotEmpty) {
+            thumbnail = 'https://img.youtube.com/vi/$youtubeId/mqdefault.jpg';
+          }
+
+          return Music(
+            id: song['id'].toString(),
+            title: song['title'] ?? 'Unknown',
+            artistName: song['artist_name'] ?? 'Unknown Artist',
+            youtubeId: youtubeId,
+            youtubeThumbnail: thumbnail,
+            playCount: (song['play_count'] ?? 0).toString(),
+            position: song['position'] as int,
+            duration: song['duration']?.toString() ?? '0',
+            genre: (song['genres'] as List?)?.join(', ') ?? '',
+            isLiked: false,
+          );
+        }));
+      }
     } catch (e) {
       print('Error loading biggest hits: $e');
+    } finally {
+      isLoadingRankings.value = false;
     }
+  }
+
+  String _extractYoutubeId(String url) {
+    if (url.isEmpty) return '';
+
+    // Xử lý các định dạng URL YouTube phổ biến
+    RegExp regExp = RegExp(
+        r'^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/');
+    Match? match = regExp.firstMatch(url);
+
+    if (match != null && match.groupCount >= 7) {
+      return match.group(7) ?? '';
+    }
+
+    // Nếu URL đã là ID
+    if (url.length == 11) return url;
+
+    return '';
   }
 
   Future<void> loadGenres() async {
@@ -125,17 +198,69 @@ class MusicController extends GetxController {
     required int currentIndex,
     required String playlistName,
   }) {
-    currentQueue.assignAll(playlist);
+    currentQueue.clear();
+    currentQueue.addAll(playlist);
     currentQueueIndex.value = currentIndex;
-    currentPlaylistName.value = playlistName;
+    isQueueMode.value = true;
+    if (playlist.isNotEmpty) {
+      updateCurrentMusic(playlist[currentIndex]);
+    }
   }
 
-  void playFromQueue(int index) {
+  Future<void> playFromQueue(int index) async {
     if (index >= 0 && index < currentQueue.length) {
-      currentQueueIndex.value = index;
-      final music = currentQueue[index];
+      try {
+        final music = currentQueue[index];
+        currentQueueIndex.value = index;
 
-      // Cập nhật player screen với bài hát mới
+        // Cập nhật UI ngay lập tức
+        currentTitle.value = music.title;
+        currentArtist.value = music.artistName;
+        currentImageUrl.value = music.youtubeThumbnail;
+        currentYoutubeId.value = music.youtubeId;
+        currentMusic.value = music;
+        showMiniPlayer.value = true;
+
+        // Load audio trong background
+        await _loadAudioUrl(music.youtubeId);
+      } catch (e) {
+        print('Error playing from queue: $e');
+        Get.snackbar(
+          'Error',
+          'Failed to play the song',
+          backgroundColor: Colors.red.withOpacity(0.7),
+          colorText: Colors.white,
+        );
+      }
+    }
+  }
+
+  // Helper method để load audio URL
+  Future<void> _loadAudioUrl(String youtubeId) async {
+    int retryCount = 0;
+    while (retryCount < 3) {
+      try {
+        final audioUrl = await getAudioUrl(youtubeId);
+        if (audioUrl != null) {
+          await audioPlayer.setUrl(audioUrl);
+          await audioPlayer.play();
+          break;
+        }
+        retryCount++;
+      } catch (e) {
+        print('Retry $retryCount failed: $e');
+        await Future.delayed(Duration(seconds: 1));
+        retryCount++;
+      }
+    }
+  }
+
+  // Thêm phương thức để cập nhật UI khi chuyển bài
+  void updatePlayerUI() {
+    if (currentQueueIndex.value >= 0 &&
+        currentQueueIndex.value < currentQueue.length) {
+      final music = currentQueue[currentQueueIndex.value];
+      currentMusic.value = music;
       Get.to(() => PlayerScreen(
             title: music.title,
             artist: music.artistName,
@@ -145,51 +270,102 @@ class MusicController extends GetxController {
     }
   }
 
-  // Phương thức để chuyển bài tiếp theo
-  void playNext() {
+  // Sửa lại phương thức playNext
+  Future<void> playNext() async {
     if (currentQueueIndex.value < currentQueue.length - 1) {
-      playFromQueue(currentQueueIndex.value + 1);
+      currentQueueIndex.value++;
+      final nextMusic = currentQueue[currentQueueIndex.value];
+
+      // Cập nhật UI trước
+      updatePlayerUI();
+
+      // Sau đó mới load và phát nhạc
+      try {
+        await changeMusic(
+          nextMusic.youtubeId,
+          nextMusic.title,
+          nextMusic.artistName,
+          nextMusic.youtubeThumbnail,
+        );
+        update(['player_screen', 'mini_player']);
+      } catch (e) {
+        print('Error playing next song: $e');
+      }
     }
   }
 
-  // Phương thức để chuyển bài trước đó
-  void playPrevious() {
+  // Tương tự cho playPrevious
+  Future<void> playPrevious() async {
     if (currentQueueIndex.value > 0) {
-      playFromQueue(currentQueueIndex.value - 1);
+      currentQueueIndex.value--;
+      final previousMusic = currentQueue[currentQueueIndex.value];
+
+      // Cập nhật UI trước
+      updatePlayerUI();
+
+      // Sau đó mới load và phát nhạc
+      try {
+        await changeMusic(
+          previousMusic.youtubeId,
+          previousMusic.title,
+          previousMusic.artistName,
+          previousMusic.youtubeThumbnail,
+        );
+        update(['player_screen', 'mini_player']);
+      } catch (e) {
+        print('Error playing previous song: $e');
+      }
     }
   }
 
   Future<void> changeMusic(
       String youtubeId, String title, String artist, String imageUrl) async {
     try {
-      if (currentYoutubeId.value == youtubeId) return;
+      isChangingAudio.value = true;
 
+      // Dừng audio hiện tại trước khi load audio mới
       await audioPlayer.stop();
 
-      // Cập nhật thông tin bài hát
-      updateCurrentSong(
-        title: title,
-        artist: artist,
-        imageUrl: imageUrl,
-        youtubeId: youtubeId,
-      );
+      // Cập nhật UI trước
+      currentYoutubeId.value = youtubeId;
+      currentTitle.value = title;
+      currentArtist.value = artist;
+      currentImageUrl.value = imageUrl;
 
-      isLoading.value = true;
-      showMiniPlayer.value = true; // Hiển thị mini player
+      // Load audio với retry mechanism
+      int retryCount = 0;
+      while (retryCount < 3) {
+        try {
+          final audioUrl = await getAudioUrl(youtubeId);
+          if (audioUrl != null) {
+            await audioPlayer.setUrl(audioUrl);
+            await audioPlayer.play();
+            break;
+          }
+          retryCount++;
+        } catch (e) {
+          print('Retry $retryCount failed: $e');
+          await Future.delayed(Duration(seconds: 1));
+          retryCount++;
+        }
+      }
 
-      final audioUrl = await getAudioUrl(youtubeId);
-      await audioPlayer.setUrl(audioUrl);
-      await audioPlayer.play();
-
-      isLoading.value = false;
+      isChangingAudio.value = false;
     } catch (e) {
       print('Error changing music: $e');
-      isLoading.value = false;
+      isChangingAudio.value = false;
+      rethrow;
     }
   }
 
-  Future<String> getAudioUrl(String youtubeId) async {
-    return await MusicService().getAudioUrl(youtubeId);
+  Future<String?> getAudioUrl(String youtubeId) async {
+    try {
+      final url = await _musicService.getAudioUrl(youtubeId);
+      return url;
+    } catch (e) {
+      print('Error getting audio URL: $e');
+      return null;
+    }
   }
 
   // Cập nhật thông tin bài hát hiện tại
@@ -201,43 +377,33 @@ class MusicController extends GetxController {
   }) {
     currentTitle.value = title;
     currentArtist.value = artist;
-    currentImageUrl.value = imageUrl;
+    currentImageUrl.value = _musicService.validateImageUrl(imageUrl);
     currentYoutubeId.value = youtubeId;
   }
 
   // Xử lý thay đổi audio
   Future<void> handleAudioChange() async {
     try {
-      isLoading.value = true;
+      if (currentYoutubeId.value.isEmpty) return;
 
-      // Dừng bài hát hiện tại nếu đang phát
-      await audioPlayer.stop();
+      final uri = Uri.parse(currentYoutubeId.value);
+      final videoId = uri.queryParameters['v'] ?? currentYoutubeId.value;
 
-      // Lấy URL audio từ YouTube
-      final yt = YoutubeExplode();
-      try {
-        final manifest =
-            await yt.videos.streamsClient.getManifest(currentYoutubeId.value);
-        final audioStream = manifest.audioOnly.withHighestBitrate();
-
-        if (audioStream != null) {
-          // Set audio source và phát
-          await audioPlayer.setUrl(audioStream.url.toString());
-          await audioPlayer.play();
-        }
-      } finally {
-        yt.close();
+      final audioUrl = await _musicService.getAudioUrl(videoId);
+      if (audioUrl != null && audioUrl.isNotEmpty) {
+        await audioPlayer.setUrl(audioUrl);
+        await audioPlayer.play();
+        isPlaying.value = true;
+        showMiniPlayer.value = true;
       }
     } catch (e) {
-      print('Error changing audio: $e');
+      print('Error handling audio change: $e');
       Get.snackbar(
         'Error',
-        'Failed to play the song',
+        'Cannot play this song',
         backgroundColor: Colors.red.withOpacity(0.7),
         colorText: Colors.white,
       );
-    } finally {
-      isLoading.value = false;
     }
   }
 
@@ -264,15 +430,8 @@ class MusicController extends GetxController {
   }
 
   // Method để ẩn/hiện mini player
-  void toggleMiniPlayer(bool show) {
-    isMiniPlayerVisible.value = show;
-    if (show) {
-      // Cập nhật thông tin cho mini player
-      currentTitle.value = currentTitle.value;
-      currentArtist.value = currentArtist.value;
-      currentImageUrl.value = currentImageUrl.value;
-      currentYoutubeId.value = currentYoutubeId.value;
-    }
+  void toggleMiniPlayer(bool value) {
+    showMiniPlayer.value = value;
   }
 
   // Toggle shuffle mode
@@ -335,5 +494,309 @@ class MusicController extends GetxController {
   // Pause playback
   Future<void> pause() async {
     await audioPlayer.pause();
+  }
+
+  // Method để thêm bài hát vào queue
+  void addToQueue(Music song) {
+    if (!isQueueMode.value) {
+      // Nếu chưa có queue, tạo queue mới với bài hát hiện tại và bài hát mới
+      final currentSong = Music(
+        id: currentYoutubeId.value,
+        title: currentTitle.value,
+        artistName: currentArtist.value,
+        youtubeThumbnail: currentImageUrl.value,
+        youtubeId: currentYoutubeId.value,
+        // displayImage: currentImageUrl.value,
+      );
+
+      currentQueue.clear();
+      currentQueue.add(currentSong);
+      currentQueue.add(song);
+      currentQueueIndex.value = 0;
+      isQueueMode.value = true;
+    } else {
+      // Thêm vào cuối hàng chờ
+      currentQueue.add(song);
+    }
+  }
+
+  Future<void> playQueueItem(int index) async {
+    if (index >= 0 && index < currentQueue.length) {
+      currentQueueIndex.value = index;
+      final song = currentQueue[index];
+
+      // Cập nhật bài hát hiện tại
+      currentMusic.value = song;
+
+      // Cập nhật các thông tin khác
+      currentTitle.value = song.title;
+      currentArtist.value = song.artistName;
+      currentImageUrl.value = song.youtubeThumbnail;
+      currentYoutubeId.value = song.youtubeId;
+
+      // Phát nhạc
+      final audioUrl = await _getAudioUrl(song.youtubeId);
+      if (audioUrl != null) {
+        await audioPlayer.stop();
+        await audioPlayer.setUrl(audioUrl);
+        await audioPlayer.play();
+        isPlaying.value = true;
+      }
+
+      // Cập nhật UI
+      update(['player_screen', 'mini_player']);
+    }
+  }
+
+  void reorderQueue(int oldIndex, int newIndex) {
+    if (oldIndex < currentQueue.length && newIndex < currentQueue.length) {
+      if (newIndex > oldIndex) newIndex--;
+      final item = currentQueue.removeAt(oldIndex);
+      currentQueue.insert(newIndex, item);
+    }
+  }
+
+  void clearQueue() {
+    currentQueue.clear();
+    isQueueMode.value = false;
+    Get.back();
+  }
+
+  // Method để xóa bài hát khỏi queue
+  void removeFromQueue(int index) {
+    if (index < currentQueue.length) {
+      currentQueue.removeAt(index);
+      if (currentQueue.isEmpty) {
+        isQueueMode.value = false;
+      }
+    }
+  }
+
+  Future<void> playMusic(Music music) async {
+    try {
+      isLoading.value = true;
+
+      // Cập nhật thông tin bài hát hiện tại
+      currentMusic.value = music;
+      currentTitle.value = music.title;
+      currentArtist.value = music.artistName;
+      currentImageUrl.value = music.youtubeThumbnail;
+      currentYoutubeId.value = music.youtubeId;
+
+      // Phát nhạc
+      await handleAudioChange();
+
+      // Hiển thị player
+      navigateToPlayer();
+    } catch (e) {
+      print('Error playing music: $e');
+      Get.snackbar(
+        'Error',
+        'Cannot play this song',
+        backgroundColor: Colors.red.withOpacity(0.7),
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  // Helper method để lấy audio URL từ YouTube ID
+  Future<String?> _getAudioUrl(String youtubeId) async {
+    try {
+      // Lấy manifest của video
+      final manifest = await _yt.videos.streamsClient.getManifest(youtubeId);
+
+      // Lấy audio stream với chất lượng cao nhất
+      final audioStream = manifest.audioOnly.withHighestBitrate();
+
+      if (audioStream != null) {
+        return audioStream.url.toString();
+      }
+
+      return null;
+    } catch (e) {
+      print('Error getting audio URL: $e');
+      return null;
+    }
+  }
+
+  void updateQueueCount() {
+    final remainingSongs = currentQueue.length - (currentQueueIndex.value + 1);
+    update(['queue_screen']);
+  }
+
+  Future<void> playMusicDirectly(Music music) async {
+    try {
+      // Cập nhật thông tin bài hát hiện tại
+      currentMusic.value = music;
+      currentYoutubeId.value = music.youtubeId;
+
+      // Hiển thị mini player
+      showMiniPlayer.value = true;
+
+      // Lấy và phát audio
+      final audioUrl = await _getAudioUrl(music.youtubeId);
+      if (audioUrl != null) {
+        await audioPlayer.stop();
+        await audioPlayer.setUrl(audioUrl);
+        await audioPlayer.play();
+        isPlaying.value = true;
+      } else {
+        throw Exception('Could not get audio URL');
+      }
+
+      // Cập nhật UI
+      update(['player_screen', 'mini_player']);
+    } catch (e) {
+      print('Error playing music directly: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to play the song',
+        backgroundColor: Colors.red.withOpacity(0.7),
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  // Thêm method để xử lý khi thu nhỏ player
+  void minimizePlayer() {
+    showMiniPlayer.value = true;
+    Get.back();
+  }
+
+  void updateCurrentMusic(Music? music) {
+    if (music != null) {
+      currentMusic.value = music;
+      currentTitle.value = music.title;
+      currentArtist.value = music.artistName;
+      currentImageUrl.value = music.youtubeThumbnail;
+      currentYoutubeId.value = music.youtubeId;
+      update();
+    }
+  }
+
+  Music? getCurrentMusic() {
+    return currentMusic.value;
+  }
+
+  Future<void> loadStartedMusic() async {
+    try {
+      final response = await dio.get('${ApiConstants.baseUrl}/api/music');
+
+      if (response.statusCode == 200 && response.data['status'] == 'success') {
+        final musicData = response.data['data']['items'] as List;
+        startedMusic.clear();
+        startedMusic.addAll(musicData.map((song) => Music(
+              id: song['id'].toString(),
+              title: song['title'] ?? 'Unknown',
+              artistName: song['artist_name'] ?? 'Unknown Artist',
+              youtubeId: song['youtube_url']?.split('watch?v=').last ?? '',
+              youtubeThumbnail: song['youtube_thumbnail'] ?? '',
+              playCount: song['play_count']?.toString(),
+              duration: song['duration']?.toString(),
+              genre: song['genres']?.join(', '),
+              isLiked: false,
+            )));
+      }
+    } catch (e) {
+      print('Error loading started music: $e');
+    }
+  }
+
+  Future<void> loadRandomMusic() async {
+    try {
+      final response = await dio.get('${ApiConstants.baseUrl}/api/music/random',
+          queryParameters: {'limit': 10});
+
+      if (response.statusCode == 200 && response.data['status'] == 'success') {
+        final musicData = response.data['data'] as List;
+        randomMusic.clear();
+        randomMusic.addAll(musicData.map((song) => Music.fromJson(song)));
+      }
+    } catch (e) {
+      print('Error loading random music: $e');
+    }
+  }
+
+  Future<void> loadAndPlayMusic(Music music) async {
+    try {
+      isLoading.value = true;
+      updateCurrentTrack(
+        music.title,
+        music.artistName,
+        music.youtubeThumbnail,
+        music.youtubeId,
+      );
+
+      final audioUrl = await _musicService.getAudioUrl(music.youtubeId);
+      if (audioUrl != null) {
+        await audioPlayer.stop();
+        await audioPlayer.setUrl(audioUrl);
+        await audioPlayer.play();
+
+        isPlaying.value = true;
+        showMiniPlayer.value = true;
+      } else {
+        throw Exception('Could not get audio URL');
+      }
+    } catch (e) {
+      print('Error playing music: $e');
+      Get.snackbar(
+        'Error',
+        'Cannot play this song',
+        backgroundColor: Colors.red.withOpacity(0.7),
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  // Thêm method để update state
+  void updateCurrentTrack(
+      String title, String artist, String imageUrl, String youtubeId) {
+    currentTitle.value = title;
+    currentArtist.value = artist;
+    currentImageUrl.value = imageUrl;
+    currentYoutubeId.value = youtubeId;
+  }
+
+  String get value => currentMusic.value?.title ?? '';
+  bool get isNotEmpty => currentMusic.value != null;
+
+  void navigateToPlayer() {
+    if (currentMusic.value != null) {
+      final music = currentMusic.value!;
+      Get.to(() => PlayerScreen(
+            title: music.title,
+            artist: music.artistName,
+            imageUrl: music.youtubeThumbnail,
+            youtubeId: music.youtubeId,
+          ));
+    }
+  }
+
+  Future<void> changeRegion(String region) async {
+    try {
+      selectedRegion.value = region;
+      isLoadingRankings.value = true;
+
+      // Load rankings for new region
+      await loadBiggestHits(region);
+
+      // Reload data if needed
+      await loadData();
+    } catch (e) {
+      print('Error changing region: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to change region',
+        backgroundColor: Colors.red.withOpacity(0.7),
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoadingRankings.value = false;
+    }
   }
 }

@@ -11,7 +11,7 @@
         android:icon="@mipmap/ic_launcher"
         android:enableOnBackInvokedCallback="true"
         >
-        
+
         <activity
             android:name="com.ryanheise.audioservice.AudioServiceActivity"
             android:exported="true"
@@ -31,7 +31,7 @@
         </activity>
 
         <!-- Audio Service -->
-        <service 
+        <service
             android:name="com.ryanheise.audioservice.AudioService"
             android:foregroundServiceType="mediaPlayback"
             android:exported="true">
@@ -41,7 +41,7 @@
         </service>
 
         <!-- Audio Service Receiver -->
-        <receiver 
+        <receiver
             android:name="com.ryanheise.audioservice.MediaButtonReceiver"
             android:exported="true">
             <intent-filter>

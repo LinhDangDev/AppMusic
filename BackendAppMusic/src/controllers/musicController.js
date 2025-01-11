@@ -132,16 +132,36 @@ const musicController = {
     }
   },
 
-  getRankings: async (req, res, next) => {
+  getRankings: async (req, res) => {
     try {
-      const { region } = req.params;
-      const rankings = await rankingService.getRankings(region);
+      const region = req.params.region.toUpperCase();
+      if (!['US', 'VN'].includes(region)) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Invalid region. Must be US or VN'
+        });
+      }
+
+      let rankings = await rankingService.getRankingsByRegion(region);
+      
+      // Nếu không có data hoặc data cũ, update từ iTunes
+      if (!rankings.length) {
+        rankings = await rankingService.updateRankings(region);
+      }
+
       res.json({
         status: 'success',
-        data: rankings
+        data: {
+          region,
+          rankings
+        }
       });
     } catch (error) {
-      next(error);
+      console.error('Error getting rankings:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message
+      });
     }
   },
 
@@ -231,7 +251,20 @@ const musicController = {
         message: 'Failed to remove from queue' 
       });
     }
-  }
+  },
+
+  getRandomMusic: async (req, res, next) => {
+    try {
+      const { limit = 10 } = req.query;
+      const music = await musicService.getRandomMusic(parseInt(limit));
+      res.json({
+        status: 'success',
+        data: music
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
 };
 
 export default musicController;

@@ -41,6 +41,8 @@ CREATE TABLE Music (
     youtube_url VARCHAR(255),
     youtube_thumbnail VARCHAR(255),
     lyrics TEXT,
+    genius_id VARCHAR(50),
+    lyrics_state ENUM('PENDING', 'FOUND', 'NOT_FOUND') DEFAULT 'PENDING',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (artist_id) REFERENCES Artists(id)
@@ -125,6 +127,16 @@ CREATE TABLE Rankings (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (music_id) REFERENCES Music(id),
     UNIQUE KEY unique_ranking (region, position)
+);
+
+CREATE TABLE Lyrics_Database (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  artist VARCHAR(255) NOT NULL,
+  lyrics TEXT,
+  source VARCHAR(50),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_song (title, artist)
 );
 
 -- Create indexes

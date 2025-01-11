@@ -20,6 +20,7 @@
         "mysql2": "^3.6.5",
         "node-cache": "^5.1.2",
         "node-cron": "^3.0.3",
+        "puppeteer": "^24.0.0",
         "youtube-sr": "^4.3.11"
     },
     "devDependencies": {

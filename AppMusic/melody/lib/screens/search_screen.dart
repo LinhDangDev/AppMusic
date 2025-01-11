@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:melody/constants/app_colors.dart';
+import 'package:melody/models/music.dart';
 import 'package:melody/widgets/bottom_player_nav.dart';
 import 'package:melody/services/music_service.dart';
 // import 'package:melody/models/music.dart';
@@ -8,6 +9,7 @@ import 'dart:async';
 import 'package:get/get.dart';
 import 'package:melody/screens/player_screen.dart';
 import 'package:melody/screens/home_screen.dart';
+import 'package:melody/provider/music_controller.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({Key? key}) : super(key: key);
@@ -16,7 +18,8 @@ class SearchScreen extends StatefulWidget {
   _SearchScreenState createState() => _SearchScreenState();
 }
 
-class _SearchScreenState extends State<SearchScreen> with AutomaticKeepAliveClientMixin {
+class _SearchScreenState extends State<SearchScreen>
+    with AutomaticKeepAliveClientMixin {
   final TextEditingController _searchController = TextEditingController();
   final MusicService _musicService = MusicService();
   bool _isLoading = false;
@@ -36,7 +39,7 @@ class _SearchScreenState extends State<SearchScreen> with AutomaticKeepAliveClie
 
   _onSearchChanged() {
     _clearTimer?.cancel();
-    
+
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () {
       _handleSearch(_searchController.text);
@@ -118,8 +121,8 @@ class _SearchScreenState extends State<SearchScreen> with AutomaticKeepAliveClie
                       borderRadius: BorderRadius.circular(30),
                       borderSide: BorderSide.none,
                     ),
-                    contentPadding: EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 16),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   ),
                   onChanged: (value) => _handleSearch(value),
                 ),
@@ -133,16 +136,23 @@ class _SearchScreenState extends State<SearchScreen> with AutomaticKeepAliveClie
                     final result = _searchResults[index];
                     return SearchResultItem(
                       result: result,
-                      onTap: () {
-                        Get.to(
-                          () => PlayerScreen(
-                            title: result.title,
-                            artist: result.artistName,
-                            imageUrl: result.displayImage,
-                            youtubeId: result.youtubeId,
-                          ),
-                          transition: Transition.downToUp,
-                        );
+                      onTap: () async {
+                        final musicController = Get.find<MusicController>();
+                        Get.to(() => PlayerScreen(
+                          title: result.title,
+                          artist: result.artistName,
+                          imageUrl: result.displayImage,
+                          youtubeId: result.youtubeId,
+                        ));
+                        
+                        // Phát nhạc
+                        await musicController.loadAndPlayMusic(Music(
+                          id: result.id,
+                          title: result.title,
+                          artistName: result.artistName,
+                          youtubeId: result.youtubeId,
+                          youtubeThumbnail: result.displayImage,
+                        ));
                       },
                     );
                   },
@@ -237,9 +247,38 @@ class SearchResultItem extends StatelessWidget {
             _buildMenuItem(
               icon: Icons.play_circle_outline,
               title: 'Phát',
-              onTap: () {
+              onTap: () async {
+                final musicController = Get.find<MusicController>();
+
+                // Tạo playlist chỉ với bài hát được chọn
+                List<Music> singleSongPlaylist = [
+                  Music(
+                    id: '',
+                    title: result.title,
+                    artistName: result.artistName,
+                    // displayImage: result.displayImage,
+                    youtubeId: result.youtubeId,
+                    youtubeThumbnail: result.displayImage,
+                  )
+                ];
+
+                // Cập nhật queue và play
+                musicController.setCurrentQueue(
+                    playlist: singleSongPlaylist,
+                    currentIndex: 0,
+                    playlistName: 'Playlist Đã Chọn');
+
+                // Play bài hát được chọn
+                await musicController.playFromQueue(0);
+
+                // Hiển thị thông báo
+                Get.snackbar(
+                  'Đã thêm vào hàng chờ',
+                  result.title,
+                  snackPosition: SnackPosition.BOTTOM,
+                );
+
                 Navigator.pop(context);
-                // TODO: Implement play functionality
               },
             ),
             _buildMenuItem(
@@ -264,6 +303,26 @@ class SearchResultItem extends StatelessWidget {
               onTap: () {
                 Navigator.pop(context);
                 // TODO: Implement share functionality
+              },
+            ),
+            _buildMenuItem(
+              icon: Icons.queue_music,
+              title: 'Thêm vào hàng chờ',
+              onTap: () {
+                final musicController = Get.find<MusicController>();
+                musicController.addToQueue(Music(
+                  id: result.id,
+                  title: result.title,
+                  artistName: result.artistName,
+                  youtubeId: result.youtubeId,
+                  youtubeThumbnail: result.displayImage,
+                ));
+                Navigator.pop(context);
+                Get.snackbar(
+                  'Đã thêm vào hàng chờ',
+                  result.title,
+                  snackPosition: SnackPosition.BOTTOM,
+                );
               },
             ),
             SizedBox(height: 8),

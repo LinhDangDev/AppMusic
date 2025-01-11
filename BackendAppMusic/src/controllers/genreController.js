@@ -40,6 +40,19 @@ class GenreController {
       next(error);
     }
   }
+
+  async getRandomMusic(req, res, next) {
+    try {
+      const limit = parseInt(req.query.limit) || 10;
+      const songs = await genreService.getRandomMusic(limit);
+      res.json({
+        status: 'success',
+        data: songs
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export default new GenreController(); 

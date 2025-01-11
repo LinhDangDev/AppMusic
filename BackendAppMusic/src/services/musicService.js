@@ -1,5 +1,6 @@
 import db from '../model/db.js';
 import YouTube from 'youtube-sr';
+import lyricsService from './lyricsService.js';
 
 class MusicService {
   // Thêm method getAllMusic
@@ -63,29 +64,27 @@ class MusicService {
   // Thêm method getMusicById
   async getMusicById(id) {
     try {
-      const [rows] = await db.query(`
+      const [rows] = await db.execute(`
         SELECT 
           m.*,
           a.name as artist_name,
           a.image_url as artist_image,
-          (SELECT COUNT(*) FROM Favorites f WHERE f.music_id = m.id) as favorite_count,
-          GROUP_CONCAT(DISTINCT g.name) as genres
+          (SELECT COUNT(*) FROM Favorites f WHERE f.music_id = m.id) as favorite_count
         FROM Music m
         LEFT JOIN Artists a ON m.artist_id = a.id
-        LEFT JOIN Music_Genres mg ON m.id = mg.music_id
-        LEFT JOIN Genres g ON mg.genre_id = g.id
         WHERE m.id = ?
-        GROUP BY m.id
       `, [id]);
 
-      if (rows.length === 0) {
-        return null;
+      if (!rows[0]) return null;
+
+      // Nếu chưa có lyrics và đang ở trạng thái PENDING
+      if (!rows[0].lyrics && rows[0].lyrics_state === 'PENDING') {
+        await lyricsService.updateLyrics(id);
+        // Lấy lại data sau khi cập nhật lyrics
+        return this.getMusicById(id);
       }
 
-      const music = rows[0];
-      music.genres = music.genres ? music.genres.split(',') : [];
-      
-      return music;
+      return rows[0];
     } catch (error) {
       console.error('Error getting music by id:', error);
       throw error;
@@ -229,6 +228,43 @@ class MusicService {
     } catch (error) {
       console.error('Search error:', error);
       return [];
+    }
+  }
+
+  // Thêm method getRandomMusic
+  async getRandomMusic(limit = 10) {
+    try {
+      const [rows] = await db.query(`
+        SELECT 
+          m.*,
+          a.name as artist_name,
+          COALESCE(a.image_url, '') as artist_image,
+          GROUP_CONCAT(DISTINCT g.name) as genres
+        FROM Music m
+        LEFT JOIN Artists a ON m.artist_id = a.id
+        LEFT JOIN Music_Genres mg ON m.id = mg.music_id
+        LEFT JOIN Genres g ON mg.genre_id = g.id
+        WHERE m.youtube_url IS NOT NULL 
+          AND m.youtube_thumbnail IS NOT NULL
+        GROUP BY m.id
+        ORDER BY RAND()
+        LIMIT ?
+      `, [limit]);
+
+      return rows.map(row => ({
+        id: row.id,
+        title: row.title,
+        artistName: row.artist_name,
+        artistImage: row.artist_image || '',
+        youtubeUrl: row.youtube_url,
+        youtubeThumbnail: row.youtube_thumbnail || '',
+        genres: row.genres ? row.genres.split(',') : [],
+        duration: row.duration || 0,
+        playCount: row.play_count || 0
+      }));
+    } catch (error) {
+      console.error('Error getting random music:', error);
+      throw error;
     }
   }
 }

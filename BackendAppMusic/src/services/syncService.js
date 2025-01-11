@@ -6,10 +6,10 @@ import rankingService from './rankingService.js';
 
 class SyncService {
   constructor() {
-    this.ITUNES_URLS = [
-      'https://itunes.apple.com/us/rss/topsongs/limit=100/json',
-      'https://itunes.apple.com/vn/rss/topsongs/limit=100/json'
-    ];
+    this.ITUNES_URLS = {
+      'VN': 'https://itunes.apple.com/vn/rss/topsongs/limit=100/json',
+      'US': 'https://itunes.apple.com/us/rss/topsongs/limit=100/json'
+    };
 
     // Chạy sync iTunes mỗi 12 giờ
     if (process.env.ENABLE_CRON_SYNC === 'true') {
@@ -55,16 +55,15 @@ class SyncService {
 
         if (videos && videos.length > 0) {
           const video = videos[0];
-          console.log(`✅ Found YouTube video for: ${query}`);
+          console.log(`✅ Found YouTube video: ${video.title}`);
           return {
             videoId: video.id,
             videoUrl: `https://www.youtube.com/watch?v=${video.id}`,
             thumbnailUrl: video.thumbnail?.url || video.thumbnails[0]?.url
           };
         }
-
         console.log(`⚠️ No results found for: ${query}`);
-
+        return null;
       } catch (error) {
         console.error(`❌ Attempt ${i + 1}/${retries} failed for "${query}":`, error.message);
 
@@ -89,22 +88,20 @@ class SyncService {
     try {
       console.log('Starting iTunes sync process...');
       
-      for (let i = 0; i < this.ITUNES_URLS.length; i++) {
-        const url = this.ITUNES_URLS[i];
-        const region = i === 0 ? 'US' : 'VN';
+      for (const [region, url] of Object.entries(this.ITUNES_URLS)) {
         console.log(`Syncing ${region} iTunes store...`);
         console.log(`Fetching from: ${url}`);
         
         const response = await axios.get(url);
         const songs = response.data.feed.entry;
-        
+
         for (const song of songs) {
           const title = song['im:name'].label;
           const artistName = song['im:artist'].label;
-          
+
           console.log(`Processing: ${title} - ${artistName}`);
-          
-          // Kiểm tra artist
+
+          // Kiểm tra và thêm artist
           let [artist] = await db.query(
             'SELECT id FROM Artists WHERE name = ?',
             [artistName]
@@ -121,8 +118,8 @@ class SyncService {
           } else {
             artistId = artist[0].id;
           }
-          
-          // Kiểm tra bài hát
+
+          // Kiểm tra bài hát tồn tại
           const [existingSong] = await db.query(
             `SELECT id, youtube_url, youtube_thumbnail 
              FROM Music 
@@ -139,7 +136,7 @@ class SyncService {
             );
             musicId = newSong.insertId;
 
-            // Chỉ tìm YouTube URL cho bài hát mới
+            // Tìm YouTube URL cho bài hát mới
             const searchQuery = `${title} ${artistName} official audio`;
             console.log(`✅ Found YouTube video for: ${searchQuery}`);
             const videoData = await this.searchYouTubeVideo(searchQuery);
@@ -154,7 +151,7 @@ class SyncService {
             }
           } else {
             musicId = existingSong[0].id;
-            // Chỉ tìm YouTube URL nếu chưa có
+            // Cập nhật YouTube URL nếu chưa có
             if (!existingSong[0].youtube_url || !existingSong[0].youtube_thumbnail) {
               const searchQuery = `${title} ${artistName} official audio`;
               console.log(`✅ Found YouTube video for: ${searchQuery}`);
@@ -172,18 +169,12 @@ class SyncService {
           }
           
           // Cập nhật Rankings
-          await db.query(
-            `INSERT INTO Rankings (music_id, region, position) 
-             VALUES (?, ?, ?) 
-             ON DUPLICATE KEY UPDATE position = VALUES(position)`,
-            [musicId, region, songs.indexOf(song) + 1]
-          );
+          await rankingService.updatePosition(musicId, region, songs.indexOf(song) + 1);
         }
         
         console.log(`Completed sync for ${region}`);
       }
       
-      await rankingService.updateRankings();
       console.log('iTunes sync completed');
     } catch (error) {
       console.error('Error syncing iTunes music:', error);

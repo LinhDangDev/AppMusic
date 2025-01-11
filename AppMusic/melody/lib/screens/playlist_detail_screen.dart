@@ -8,6 +8,7 @@ import 'package:melody/provider/audio_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:melody/constants/app_colors.dart';
 import 'dart:ui';
+import 'package:melody/provider/music_controller.dart';
 
 class PlaylistDetailScreen extends StatelessWidget {
   final Playlist playlist;
@@ -46,32 +47,36 @@ class PlaylistDetailScreen extends StatelessWidget {
   Widget _buildCustomAppBar() {
     return Container(
       height: 300,
-      decoration: BoxDecoration(
-        image: DecorationImage(
-          image: NetworkImage(_getPlaylistImage()),
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            return Container(
-              color: Colors.grey[900],
-              child: const Icon(Icons.music_note, color: Colors.white, size: 50),
-            );
-          },
-        ),
-      ),
       child: Stack(
         children: [
+          // Background image
+          Positioned.fill(
+            child: Image.network(
+              _getPlaylistImage(),
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  color: Colors.grey[900],
+                  child: const Icon(Icons.music_note,
+                      color: Colors.white, size: 50),
+                );
+              },
+            ),
+          ),
           // Blur overlay
-          BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.3),
-                    Colors.black.withOpacity(0.5),
-                  ],
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.3),
+                      Colors.black.withOpacity(0.5),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -155,7 +160,8 @@ class PlaylistDetailScreen extends StatelessWidget {
                         width: 56,
                         height: 56,
                         color: Colors.grey[800],
-                        child: const Icon(Icons.music_note, color: Colors.white),
+                        child:
+                            const Icon(Icons.music_note, color: Colors.white),
                       ),
                     ),
                   ),
@@ -188,7 +194,8 @@ class PlaylistDetailScreen extends StatelessWidget {
             childCount: songs.length,
           ),
         ),
-        const SliverToBoxAdapter(child: SizedBox(height: 100)), // Bottom padding for mini player
+        const SliverToBoxAdapter(
+            child: SizedBox(height: 100)), // Bottom padding for mini player
       ],
     );
   }
@@ -204,7 +211,8 @@ class PlaylistDetailScreen extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.play_circle_outline, color: Colors.white),
+              leading:
+                  const Icon(Icons.play_circle_outline, color: Colors.white),
               title: const Text('Phát', style: TextStyle(color: Colors.white)),
               onTap: () {
                 Get.back();
@@ -213,7 +221,8 @@ class PlaylistDetailScreen extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.playlist_add, color: Colors.white),
-              title: const Text('Thêm vào playlist', style: TextStyle(color: Colors.white)),
+              title: const Text('Thêm vào playlist',
+                  style: TextStyle(color: Colors.white)),
               onTap: () {
                 Get.back();
                 // TODO: Implement add to playlist
@@ -221,7 +230,8 @@ class PlaylistDetailScreen extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.favorite_border, color: Colors.white),
-              title: const Text('Thêm vào yêu thích', style: TextStyle(color: Colors.white)),
+              title: const Text('Thêm vào yêu thích',
+                  style: TextStyle(color: Colors.white)),
               onTap: () {
                 Get.back();
                 // TODO: Implement add to favorites
@@ -247,14 +257,14 @@ class PlaylistDetailScreen extends StatelessWidget {
 
   String getYoutubeThumbnail(String youtubeId) {
     if (youtubeId.isEmpty) return '';
-    // Sử dụng maxresdefault để lấy chất lượng cao nhất
     return 'https://img.youtube.com/vi/$youtubeId/maxresdefault.jpg';
   }
 
   Future<void> _loadSongs() async {
     try {
       isLoading.value = true;
-      final playlistSongs = await _playlistService.getPlaylistSongs(playlist.id);
+      final playlistSongs =
+          await _playlistService.getPlaylistSongs(playlist.id);
       songs.assignAll(playlistSongs);
     } catch (e) {
       print('Error loading playlist songs: $e');
@@ -270,23 +280,17 @@ class PlaylistDetailScreen extends StatelessWidget {
   }
 
   void _playSong(BuildContext context, Music song, int index) {
-    final audioProvider = Provider.of<AudioProvider>(context, listen: false);
-    
-    audioProvider.updateQueue(
-      songs.map((s) => {
-        'title': s.title,
-        'artist': s.artistName,
-        'imageUrl': getYoutubeThumbnail(s.youtubeId),
-        'youtubeId': s.youtubeId,
-      }).toList(),
-      index,
+    final musicController = Get.find<MusicController>();
+    musicController.setCurrentQueue(
+      playlist: songs,
+      currentIndex: index,
+      playlistName: playlist.name
     );
-
     Get.to(() => PlayerScreen(
       title: song.title,
       artist: song.artistName,
-      imageUrl: getYoutubeThumbnail(song.youtubeId),
+      imageUrl: song.youtubeThumbnail,
       youtubeId: song.youtubeId,
     ));
   }
-} 
+}
