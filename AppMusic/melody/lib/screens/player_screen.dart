@@ -28,10 +28,11 @@ class PlayerScreen extends GetView<MusicController> {
     required this.imageUrl,
     required this.youtubeId,
   }) : super(key: key) {
-    if (controller.currentMusic.value == null ||
-        controller.currentMusic.value?.youtubeId != youtubeId) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Move state updates to post-frame callback
+      final controller = Get.find<MusicController>();
       controller.updateCurrentTrack(title, artist, imageUrl, youtubeId);
-    }
+    });
   }
 
   @override

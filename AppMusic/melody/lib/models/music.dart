@@ -25,10 +25,10 @@ class Music {
 
   factory Music.fromJson(Map<String, dynamic> json) {
     String youtubeId = '';
-    String thumbnail = json['youtubeThumbnail'] ?? '';
+    String thumbnail = '';
     
     // Xử lý YouTube URL để lấy ID
-    final youtubeUrl = json['youtubeUrl'] ?? '';
+    final youtubeUrl = json['youtube_url'] ?? '';
     if (youtubeUrl.isNotEmpty) {
       Uri uri = Uri.parse(youtubeUrl);
       if (uri.host.contains('youtube.com')) {
@@ -38,13 +38,19 @@ class Music {
       }
     }
 
+    // Xử lý thumbnail
+    thumbnail = json['youtube_thumbnail'] ?? '';
+    if (thumbnail.isEmpty && youtubeId.isNotEmpty) {
+      thumbnail = 'https://img.youtube.com/vi/$youtubeId/hqdefault.jpg';
+    }
+
     return Music(
       id: json['id'].toString(),
       title: json['title'] ?? 'Unknown',
-      artistName: json['artistName'] ?? 'Unknown Artist',
+      artistName: json['artist_name'] ?? 'Unknown Artist',
       youtubeId: youtubeId,
       youtubeThumbnail: thumbnail,
-      playCount: json['playCount']?.toString(),
+      playCount: json['play_count']?.toString(),
       duration: json['duration']?.toString(),
       genre: (json['genres'] as List?)?.join(', '),
       isLiked: false,

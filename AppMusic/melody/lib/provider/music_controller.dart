@@ -572,27 +572,33 @@ class MusicController extends GetxController {
     }
   }
 
-  Future<void> playMusic(Music music) async {
+  Future<void> playMusic(String youtubeId, String title, String artist, String imageUrl) async {
     try {
       isLoading.value = true;
+      
+      // Update UI state
+      currentTitle.value = title;
+      currentArtist.value = artist; 
+      currentImageUrl.value = imageUrl;
+      currentYoutubeId.value = youtubeId;
+      showMiniPlayer.value = true;
 
-      // Cập nhật thông tin bài hát hiện tại
-      currentMusic.value = music;
-      currentTitle.value = music.title;
-      currentArtist.value = music.artistName;
-      currentImageUrl.value = music.youtubeThumbnail;
-      currentYoutubeId.value = music.youtubeId;
-
-      // Phát nhạc
-      await handleAudioChange();
-
-      // Hiển thị player
-      navigateToPlayer();
+      // Get audio URL
+      final audioUrl = await _musicService.getAudioUrl(youtubeId);
+      if (audioUrl != null) {
+        // Stop current playback
+        await audioPlayer.stop();
+        
+        // Set new audio source and play
+        await audioPlayer.setUrl(audioUrl);
+        await audioPlayer.play();
+        isPlaying.value = true;
+      }
     } catch (e) {
       print('Error playing music: $e');
       Get.snackbar(
         'Error',
-        'Cannot play this song',
+        'Failed to play the song',
         backgroundColor: Colors.red.withOpacity(0.7),
         colorText: Colors.white,
       );

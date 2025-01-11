@@ -104,12 +104,21 @@ class MusicService {
 
   Future<String?> getAudioUrl(String youtubeId) async {
     try {
-      final manifest = await _yt.videos.streamsClient.getManifest(youtubeId);
-      final audioStream = manifest.audioOnly.withHighestBitrate();
-      if (audioStream != null) {
-        return audioStream.url.toString();
+      // Kiểm tra và làm sạch YouTube ID
+      String videoId = youtubeId;
+      if (youtubeId.contains('youtube.com') || youtubeId.contains('youtu.be')) {
+        final uri = Uri.parse(youtubeId);
+        videoId = uri.queryParameters['v'] ?? 
+                  youtubeId.split('/').last.split('?').first;
       }
-      return null;
+      
+      if (videoId.isEmpty) {
+        throw Exception('Invalid YouTube ID');
+      }
+
+      final manifest = await _yt.videos.streamsClient.getManifest(videoId);
+      final audioStream = manifest.audioOnly.withHighestBitrate();
+      return audioStream.url.toString();
     } catch (e) {
       print('Error getting audio URL: $e');
       return null;

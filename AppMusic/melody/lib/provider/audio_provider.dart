@@ -5,6 +5,7 @@ import 'package:melody/provider/music_controller.dart';
 import 'package:melody/services/audio_handler.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:melody/models/music.dart';
+import 'package:melody/services/music_service.dart';
 
 class AudioProvider extends ChangeNotifier {
   final AudioPlayer _audioPlayer = AudioPlayer();
@@ -64,42 +65,32 @@ class AudioProvider extends ChangeNotifier {
 
   Future<void> playYoutubeAudio(
     String youtubeId, {
-    required String title,
-    required String artist,
-    required String imageUrl,
+    String? title,
+    String? artist,
+    String? imageUrl,
   }) async {
     try {
-      // Khởi tạo AudioHandler nếu chưa có
-      if (_audioHandler == null) {
-        await initAudioHandler();
+      final musicService = MusicService();
+      final audioUrl = await musicService.getAudioUrl(youtubeId);
+
+      if (audioUrl != null) {
+        await _audioPlayer.stop();
+        await _audioPlayer.setUrl(audioUrl);
+        await _audioPlayer.play();
+
+        // Cập nhật thông tin bài hát
+        currentSongTitle = title;
+        currentArtist = artist;
+        currentImageUrl = imageUrl;
+        isPlaying = true;
+
+        notifyListeners();
+      } else {
+        throw Exception('Could not get audio URL');
       }
-
-      // Cập nhật thông tin bài hát
-      currentSongTitle = title;
-      currentArtist = artist;
-      currentImageUrl = imageUrl;
-      currentYoutubeId = youtubeId;
-
-      // Play audio thông qua AudioHandler
-      await _audioHandler?.playYoutubeAudio(youtubeId);
-
-      // Lắng nghe duration và position từ AudioHandler
-      if (_audioHandler != null) {
-        _audioHandler!.player.durationStream.listen((dur) {
-          duration = dur ?? Duration.zero;
-          notifyListeners();
-        });
-
-        _audioHandler!.player.positionStream.listen((pos) {
-          position = pos;
-          notifyListeners();
-        });
-      }
-
-      isPlaying = true;
-      notifyListeners();
     } catch (e) {
-      print('Error playing audio: $e');
+      print('Error playing YouTube audio: $e');
+      rethrow;
     }
   }
 
@@ -125,10 +116,10 @@ class AudioProvider extends ChangeNotifier {
 
   Future<void> playNext() async {
     final musicController = Get.find<MusicController>();
-    
+
     if (musicController.isQueueMode.value) {
       int nextIndex = musicController.currentQueueIndex.value + 1;
-      
+
       // Kiểm tra repeat mode trước khi reset về 0
       if (nextIndex >= musicController.currentQueue.length) {
         if (repeatMode == RepeatMode.all) {

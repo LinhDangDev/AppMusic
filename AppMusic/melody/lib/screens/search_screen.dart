@@ -139,12 +139,12 @@ class _SearchScreenState extends State<SearchScreen>
                       onTap: () async {
                         final musicController = Get.find<MusicController>();
                         Get.to(() => PlayerScreen(
-                          title: result.title,
-                          artist: result.artistName,
-                          imageUrl: result.displayImage,
-                          youtubeId: result.youtubeId,
-                        ));
-                        
+                              title: result.title,
+                              artist: result.artistName,
+                              imageUrl: result.displayImage,
+                              youtubeId: result.youtubeId,
+                            ));
+
                         // Phát nhạc
                         await musicController.loadAndPlayMusic(Music(
                           id: result.id,

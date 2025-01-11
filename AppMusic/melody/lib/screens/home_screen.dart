@@ -542,12 +542,12 @@ class HomeScreen extends GetView<MusicController> {
   }
 
   void _playMusic(Music music) {
-    Get.to(() => PlayerScreen(
-          title: music.title,
-          artist: music.artistName,
-          imageUrl: music.youtubeThumbnail,
-          youtubeId: music.youtubeId,
-        ));
+    controller.playMusic(
+      music.youtubeId,
+      music.title,
+      music.artistName,
+      music.youtubeThumbnail,
+    );
   }
 
   Widget _buildGenres() {
