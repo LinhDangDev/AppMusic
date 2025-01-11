@@ -16,13 +16,17 @@ class SearchScreen extends StatefulWidget {
   _SearchScreenState createState() => _SearchScreenState();
 }
 
-class _SearchScreenState extends State<SearchScreen> {
+class _SearchScreenState extends State<SearchScreen> with AutomaticKeepAliveClientMixin {
   final TextEditingController _searchController = TextEditingController();
   final MusicService _musicService = MusicService();
   bool _isLoading = false;
   List<SearchResult> _searchResults = [];
   String _error = '';
   Timer? _debounce;
+  Timer? _clearTimer;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -31,18 +35,25 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   _onSearchChanged() {
+    _clearTimer?.cancel();
+    
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () {
       _handleSearch(_searchController.text);
     });
   }
 
-  // Hàm tìm kiếm
   Future<void> _handleSearch(String query) async {
+    _clearTimer?.cancel();
+
     if (query.isEmpty) {
-      setState(() {
-        _searchResults = [];
-        _error = '';
+      _clearTimer = Timer(const Duration(minutes: 5), () {
+        if (mounted) {
+          setState(() {
+            _searchResults = [];
+            _error = '';
+          });
+        }
       });
       return;
     }
@@ -54,20 +65,34 @@ class _SearchScreenState extends State<SearchScreen> {
 
     try {
       final results = await _musicService.searchMusic(query);
-      setState(() {
-        _searchResults = results.cast<SearchResult>();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _searchResults = results.cast<SearchResult>();
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _error = 'Có lỗi xảy ra khi tìm kiếm';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = 'Có lỗi xảy ra khi tìm kiếm';
+          _isLoading = false;
+        });
+      }
     }
   }
 
   @override
+  void dispose() {
+    _debounce?.cancel();
+    _clearTimer?.cancel();
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: Colors.black,
       body: Container(
@@ -131,14 +156,6 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _debounce?.cancel();
-    _searchController.removeListener(_onSearchChanged);
-    _searchController.dispose();
-    super.dispose();
   }
 }
 
