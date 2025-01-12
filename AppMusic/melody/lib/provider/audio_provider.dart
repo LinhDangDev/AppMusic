@@ -107,10 +107,15 @@ class AudioProvider extends ChangeNotifier {
   }
 
   Future<void> seek(Duration position) async {
-    if (_audioHandler != null) {
-      await _audioHandler!.player.seek(position);
-      this.position = position;
+    try {
+      await _audioPlayer.seek(position);
+      // Nếu đang pause, giữ nguyên trạng thái pause
+      if (!isPlaying) {
+        await _audioPlayer.pause();
+      }
       notifyListeners();
+    } catch (e) {
+      print('Error seeking: $e');
     }
   }
 
@@ -351,6 +356,25 @@ class AudioProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       print('Error pausing audio: $e');
+    }
+  }
+
+  Future<void> togglePlay() async {
+    try {
+      if (isPlaying) {
+        await pause();
+      } else {
+        // Lấy vị trí hiện tại trước khi play
+        final position = _audioPlayer.position;
+        await _audioPlayer.play();
+        // Seek đến vị trí đã lưu
+        if (position != Duration.zero) {
+          await _audioPlayer.seek(position);
+        }
+      }
+      notifyListeners();
+    } catch (e) {
+      print('Error toggling play state: $e');
     }
   }
 

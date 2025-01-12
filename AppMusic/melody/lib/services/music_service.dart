@@ -9,28 +9,46 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt;
 
 class MusicService {
   final _yt = yt.YoutubeExplode();
-  final Dio _dio = Dio();
+  final Dio _dio = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 30),
+    receiveTimeout: const Duration(seconds: 30),
+    sendTimeout: const Duration(seconds: 30),
+  ));
 
   MusicService() {
     _dio.options.validateStatus = (status) {
       return status! < 500;
     };
-    _dio.options.receiveTimeout = const Duration(seconds: 30);
-    _dio.options.connectTimeout = const Duration(seconds: 30);
+    _dio.options.receiveTimeout = const Duration(seconds: 60);
+    _dio.options.connectTimeout = const Duration(seconds: 60);
+
+    _dio.options.baseUrl = ApiConstants.baseUrl;
+    _dio.options.headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
   }
 
   Future<List<Music>> getAllMusic() async {
-    try {
-      final response = await _dio.get('${ApiConstants.baseUrl}/api/music');
-      if (response.data['status'] == 'success') {
-        final items = response.data['data']['items'] as List;
-        return items.map((item) => Music.fromJson(item)).toList();
+    int retries = 0;
+    while (retries < ApiConstants.maxRetries) {
+      try {
+        final response = await _dio.get('/api/music');
+        if (response.data['status'] == 'success') {
+          final items = response.data['data']['items'] as List;
+          return items.map((item) => Music.fromJson(item)).toList();
+        }
+        return [];
+      } catch (e) {
+        retries++;
+        if (retries == ApiConstants.maxRetries) {
+          print('Error getting all music after $retries retries: $e');
+          rethrow;
+        }
+        await Future.delayed(Duration(milliseconds: ApiConstants.retryDelay));
       }
-      return [];
-    } catch (e) {
-      print('Error getting all music: $e');
-      return [];
     }
+    return [];
   }
 
   Future<List<Music>> getMusicRankings(String region) async {
@@ -108,10 +126,10 @@ class MusicService {
       String videoId = youtubeId;
       if (youtubeId.contains('youtube.com') || youtubeId.contains('youtu.be')) {
         final uri = Uri.parse(youtubeId);
-        videoId = uri.queryParameters['v'] ?? 
-                  youtubeId.split('/').last.split('?').first;
+        videoId = uri.queryParameters['v'] ??
+            youtubeId.split('/').last.split('?').first;
       }
-      
+
       if (videoId.isEmpty) {
         throw Exception('Invalid YouTube ID');
       }
@@ -168,15 +186,16 @@ class MusicService {
 
   Future<List<Music>> getBiggestHits(String region) async {
     try {
-      final response = await _dio.get('${ApiConstants.baseUrl}/api/music/rankings/$region');
-      
+      final response =
+          await _dio.get('${ApiConstants.baseUrl}/api/music/rankings/$region');
+
       if (response.statusCode == 200 && response.data['status'] == 'success') {
         final rankingsData = response.data['data']['rankings'] as List;
         return rankingsData.map((song) {
           // Validate YouTube data
           String youtubeId = _extractYoutubeId(song['youtube_url'] ?? '');
           String thumbnail = song['youtube_thumbnail'] ?? '';
-          
+
           if (thumbnail.isEmpty && youtubeId.isNotEmpty) {
             thumbnail = 'https://img.youtube.com/vi/$youtubeId/mqdefault.jpg';
           }

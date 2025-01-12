@@ -92,7 +92,7 @@ class HomeScreen extends GetView<MusicController> {
       backgroundColor: Colors.transparent,
       elevation: 0,
       title: const Text(
-        'Good afternoon',
+        'Chào buổi sáng',
         style: TextStyle(
           color: Colors.black,
           fontSize: 24,
@@ -262,12 +262,10 @@ class HomeScreen extends GetView<MusicController> {
                 final music = suggestedSongs[index];
                 return GestureDetector(
                   onTap: () {
-                    controller.playMusic(
-                      music,
-                      playlist: suggestedSongs,
-                      currentIndex: index,
-                      playlistName: "Get You Started"
-                    );
+                    controller.playMusic(music,
+                        playlist: suggestedSongs,
+                        currentIndex: index,
+                        playlistName: "Get You Started");
                   },
                   child: Container(
                     width: 140,
@@ -406,8 +404,8 @@ class HomeScreen extends GetView<MusicController> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              Obx(() => 
-                DropdownButton<String>(
+              Obx(
+                () => DropdownButton<String>(
                   value: controller.selectedRegion.value,
                   dropdownColor: Colors.white,
                   style: TextStyle(color: Colors.black),
@@ -421,7 +419,6 @@ class HomeScreen extends GetView<MusicController> {
                   items: [
                     DropdownMenuItem(value: 'VN', child: Text('Vietnam')),
                     DropdownMenuItem(value: 'US', child: Text('US')),
-                    DropdownMenuItem(value: 'KR', child: Text('Korea')),
                   ],
                 ),
               ),
@@ -475,7 +472,8 @@ class HomeScreen extends GetView<MusicController> {
                             width: 50,
                             height: 50,
                             color: Colors.grey[300],
-                            child: Icon(Icons.music_note, color: Colors.grey[700]),
+                            child:
+                                Icon(Icons.music_note, color: Colors.grey[700]),
                           );
                         },
                       ),
@@ -514,15 +512,28 @@ class HomeScreen extends GetView<MusicController> {
                   itemBuilder: (BuildContext context) => [
                     PopupMenuItem(
                       value: 'play',
-                      child: Text('Play Now', style: TextStyle(color: Colors.black)),
+                      child: Text('Play Now',
+                          style: TextStyle(color: Colors.black)),
                     ),
                     PopupMenuItem(
                       value: 'queue',
-                      child: Text('Add to Queue', style: TextStyle(color: Colors.black)),
+                      child: Text('Add to Queue',
+                          style: TextStyle(color: Colors.black)),
                     ),
                   ],
                 ),
-                onTap: () => controller.playMusic(music),
+                onTap: () {
+                  if (music.youtubeId.isEmpty) {
+                    Get.snackbar(
+                      'Error',
+                      'Cannot play this song. Invalid video ID.',
+                      backgroundColor: Colors.red.withOpacity(0.7),
+                      colorText: Colors.white,
+                    );
+                    return;
+                  }
+                  _playRankingSong(music, index);
+                },
               );
             },
           );
@@ -750,6 +761,40 @@ class HomeScreen extends GetView<MusicController> {
         );
       },
     );
+  }
+
+  void _playRankingSong(Music music, int index) async {
+    try {
+      final musicController = Get.find<MusicController>();
+
+      // Kiểm tra YouTube ID trước khi phát
+      if (music.youtubeId.isEmpty) {
+        throw Exception('Invalid YouTube ID');
+      }
+
+      // Cập nhật queue với danh sách rankings
+      musicController.currentQueue.assignAll(controller.rankings);
+      musicController.currentQueueIndex.value = index;
+
+      // Mở player screen
+      Get.to(() => PlayerScreen(
+        title: music.title,
+        artist: music.artistName,
+        imageUrl: music.youtubeThumbnail,
+        youtubeId: music.youtubeId,
+      ));
+
+      // Phát nhạc
+      await musicController.loadAndPlayMusic(music);
+    } catch (e) {
+      print('Error playing ranking song: $e');
+      Get.snackbar(
+        'Error',
+        'Cannot play this song. Invalid video ID.',
+        backgroundColor: Colors.red.withOpacity(0.7),
+        colorText: Colors.white,
+      );
+    }
   }
 }
 

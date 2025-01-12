@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
-import 'package:melody/models/music.dart';
+// import 'package:melody/models/music.dart';
 import 'package:melody/screens/Queue_screen.dart';
 import 'package:melody/provider/music_controller.dart';
 import 'package:melody/constants/api_constants.dart';
-import 'package:melody/services/music_service.dart';
+// import 'package:melody/services/music_service.dart';
 
 enum RepeatMode {
   off,
