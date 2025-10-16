@@ -129,11 +129,12 @@ class MusicController extends GetxController {
   Future<void> loadBiggestHits(String region) async {
     try {
       isLoadingRankings.value = true;
-      final response = await dio.get('${ApiConstants.baseUrl}/api/music/rankings/$region');
+      final response =
+          await dio.get('${ApiConstants.baseUrl}/api/music/rankings/$region');
 
       if (response.statusCode == 200 && response.data['status'] == 'success') {
         final rankingsData = response.data['data']['rankings'] as List;
-        
+
         // Xóa danh sách cũ và thêm danh sách mới
         rankings.clear();
 
@@ -180,12 +181,13 @@ class MusicController extends GetxController {
   String _extractYoutubeId(String url) {
     try {
       if (url.isEmpty) return '';
-      
+
       if (url.contains('youtu.be/')) {
         return url.split('youtu.be/')[1].split('?')[0];
       } else if (url.contains('youtube.com/watch')) {
         return Uri.parse(url).queryParameters['v'] ?? '';
-      } else if (url.length == 11) { // Nếu url đã là youtube_id
+      } else if (url.length == 11) {
+        // Nếu url đã là youtube_id
         return url;
       }
       return '';
@@ -768,11 +770,12 @@ class MusicController extends GetxController {
 
   Future<void> loadRandomMusic() async {
     try {
-      final response = await dio.get('${ApiConstants.baseUrl}/api/music/random?limit=10');
+      final response =
+          await dio.get('${ApiConstants.baseUrl}/api/music/random?limit=10');
 
       if (response.statusCode == 200 && response.data['status'] == 'success') {
         final songsData = response.data['data'] as List;
-        
+
         // Xóa danh sách cũ
         randomMusic.clear();
 
@@ -924,11 +927,12 @@ class MusicController extends GetxController {
   Future<void> loadGetYouStarted() async {
     try {
       isLoadingGetYouStarted.value = true;
-      final response = await dio.get('${ApiConstants.baseUrl}/api/music/random?limit=10');
+      final response =
+          await dio.get('${ApiConstants.baseUrl}/api/music/random?limit=10');
 
       if (response.statusCode == 200 && response.data['status'] == 'success') {
         final songsData = response.data['data'] as List;
-        
+
         // Xóa danh sách cũ
         getYouStarted.clear();
 

@@ -1,19 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:melody/screens/home_screen.dart';
-import 'package:audio_service/audio_service.dart';
-import 'package:melody/services/audio_handler.dart';
 import 'package:get/get.dart';
-import 'package:melody/provider/music_controller.dart';
 import 'package:provider/provider.dart';
 import 'package:melody/provider/audio_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  final musicController = Get.put(MusicController());
+
   final audioProvider = AudioProvider();
   await audioProvider.initAudioHandler();
-  
+
   runApp(
     MultiProvider(
       providers: [
