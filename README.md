@@ -194,15 +194,15 @@ docker-compose up --build
 
 **Environment Variables (.env):**
 ```env
-PORT=3000
-DB_HOST=localhost
-DB_PORT=3307
-DB_USER=appmusic
-DB_PASSWORD=appmusic123
-DB_NAME=app_music
-REDIS_HOST=localhost
-REDIS_PORT=6379
-NODE_ENV=development
+PORT=
+DB_HOST=
+DB_PORT=
+DB_USER=
+DB_PASSWORD=
+DB_NAME=
+REDIS_HOST=
+REDIS_PORT=
+NODE_ENV=
 ```
 
 ### Mobile Development
