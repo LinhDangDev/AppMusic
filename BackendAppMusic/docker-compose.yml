@@ -7,22 +7,20 @@ services:
     volumes:
       - redis_data:/data
 
-  mysql:
-    image: mysql:8.0
+  postgres:
+    image: postgres:15-alpine
     container_name: app_music_db
     environment:
-      MYSQL_DATABASE: app_music
-      MYSQL_USER: appmusic
-      MYSQL_PASSWORD: appmusic123
-      MYSQL_ROOT_PASSWORD: root123
+      POSTGRES_DB: app_music
+      POSTGRES_USER: appmusic
+      POSTGRES_PASSWORD: appmusic123
     volumes:
       - ./init:/docker-entrypoint-initdb.d
-      - mysql_data:/var/lib/mysql
+      - postgres_data:/var/lib/postgresql/data
     ports:
-      - "3307:3306"
-    command: --default-authentication-plugin=mysql_native_password
+      - "5432:5432"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD-SHELL", "pg_isready -U appmusic"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -31,19 +29,22 @@ services:
     build: .
     container_name: app_music_backend
     environment:
-      DB_HOST: mysql
+      DB_HOST: postgres
+      DB_PORT: 5432
       DB_USER: appmusic
       DB_PASSWORD: appmusic123
       DB_NAME: app_music
+      DB_TYPE: postgres
       NODE_ENV: development
       ITUNES_API: "https://itunes.apple.com/vn/rss/topsongs/limit=100/json"
       ENABLE_CRON_SYNC: "true"
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
     ports:
       - "3000:3000"
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
       redis:
         condition: service_started
@@ -53,5 +54,5 @@ services:
       - /usr/src/app/node_modules
 
 volumes:
-  mysql_data:
+  postgres_data:
   redis_data:

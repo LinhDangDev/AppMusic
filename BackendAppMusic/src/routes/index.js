@@ -1,4 +1,5 @@
 import express from 'express';
+import authRoutes from './authRoutes.js';
 import musicRoutes from './musicRoutes.js';
 import artistRoutes from './artistRoutes.js';
 import playlistRoutes from './playlistRoutes.js';
@@ -8,6 +9,7 @@ import genreRoutes from './genreRoutes.js';
 const router = express.Router();
 
 // Mount các routes với prefix /api
+router.use('/api/auth', authRoutes);
 router.use('/api/music', musicRoutes);
 router.use('/api/artists', artistRoutes);
 router.use('/api/playlists', playlistRoutes);
@@ -22,4 +24,4 @@ router.get('/api/health', (req, res) => {
   });
 });
 
-export default router; 
+export default router;

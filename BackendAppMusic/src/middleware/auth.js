@@ -1,10 +1,11 @@
-const authMiddleware = async (req, res, next) => {
-  // Gán một user ID mặc định
-  req.user = {
-    uid: 'default-user',
-    role: 'user'
-  };
-  next();
-};
+/**
+ * DEPRECATED: File này không còn được sử dụng
+ * Vui lòng sử dụng authMiddleware.js thay thế
+ *
+ * Import: import { authenticateToken } from '../middleware/authMiddleware.js';
+ */
 
-export default authMiddleware;
+import { authenticateToken } from './authMiddleware.js';
+
+// Export để backward compatibility
+export default authenticateToken;

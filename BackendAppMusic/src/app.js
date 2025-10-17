@@ -1,17 +1,23 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import { connectWithRetry } from './model/db.js';
 import initService from './services/initService.js';
 import routes from './routes/index.js';
 import errorHandler from './middleware/errorHandler.js';
 import cron from 'node-cron';
 import genreService from './services/genreService.js';
+import authService from './services/authService.js';
 
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || '*',
+  credentials: true // Allow cookies
+}));
 app.use(express.json());
+app.use(cookieParser());
 
 // Mount routes
 app.use('/', routes);
@@ -64,6 +70,17 @@ const startServer = async () => {
         console.log('Scheduled genre update completed');
       } catch (error) {
         console.error('Scheduled genre update failed:', error);
+      }
+    });
+
+    // Cleanup expired tokens mỗi ngày lúc 3:00 AM
+    cron.schedule('0 3 * * *', async () => {
+      console.log('Starting expired tokens cleanup...');
+      try {
+        await authService.cleanupExpiredTokens();
+        console.log('Expired tokens cleanup completed');
+      } catch (error) {
+        console.error('Token cleanup failed:', error);
       }
     });
 
