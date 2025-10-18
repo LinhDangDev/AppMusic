@@ -3,17 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
+import 'dart:async';
+import 'dart:io';
 // import 'package:melody/models/music.dart';
-import 'package:melody/screens/Queue_screen.dart';
+import 'package:melody/screens/queue_screen.dart';
 import 'package:melody/provider/music_controller.dart';
 import 'package:melody/constants/api_constants.dart';
 // import 'package:melody/services/music_service.dart';
 
-enum RepeatMode {
-  off,
-  one,
-  all,
-}
+// RepeatMode enum is now imported from music_controller.dart
 
 class PlayerScreen extends GetView<MusicController> {
   final String title;
@@ -160,6 +158,19 @@ class PlayerScreen extends GetView<MusicController> {
             borderRadius: BorderRadius.circular(12),
             child: Obx(() {
               final imageUrl = controller.currentImageUrl.value;
+
+              // ✅ Validate image URL before loading
+              if (imageUrl.isEmpty) {
+                return Container(
+                  color: Colors.grey[900],
+                  child: const Icon(
+                    Icons.music_note,
+                    color: Colors.white,
+                    size: 64,
+                  ),
+                );
+              }
+
               return Image.network(
                 imageUrl,
                 fit: BoxFit.contain,
@@ -362,8 +373,6 @@ class PlayerScreen extends GetView<MusicController> {
         return Icons.repeat_one;
       case RepeatMode.all:
         return Icons.repeat;
-      default:
-        return Icons.repeat;
     }
   }
 
@@ -467,28 +476,57 @@ class PlayerScreen extends GetView<MusicController> {
 
   void _addToFavorites() async {
     try {
+      // ✅ Validate youtubeId before API call
+      if (youtubeId.isEmpty) {
+        Get.snackbar(
+          'Error',
+          'Invalid song data. Cannot add to favorites.',
+          backgroundColor: Colors.red.withOpacity(0.7),
+          colorText: Colors.white,
+        );
+        return;
+      }
+
       final response = await http.post(
-        Uri.parse(
-            '${ApiConstants.baseUrl}/api/users/me/favorites/${youtubeId}'),
+        Uri.parse('${ApiConstants.baseUrl}/api/users/me/favorites/$youtubeId'),
         headers: {'Content-Type': 'application/json'},
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception('Request timeout');
+        },
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        Get.back();
         Get.snackbar(
           'Success',
           'Song added to favorites successfully',
           backgroundColor: Colors.green.withOpacity(0.7),
           colorText: Colors.white,
+          snackPosition: SnackPosition.BOTTOM,
         );
       } else {
         throw Exception('Failed to add song to favorites');
       }
+    } on SocketException {
+      Get.snackbar(
+        'Network Error',
+        'Failed to connect. Please check your internet connection.',
+        backgroundColor: Colors.red.withOpacity(0.7),
+        colorText: Colors.white,
+      );
+    } on TimeoutException {
+      Get.snackbar(
+        'Timeout',
+        'Request took too long. Please try again.',
+        backgroundColor: Colors.red.withOpacity(0.7),
+        colorText: Colors.white,
+      );
     } catch (e) {
       print('Error adding to favorites: $e');
       Get.snackbar(
         'Error',
-        'Failed to add song to favorites',
+        'Failed to add song to favorites. Please try again.',
         backgroundColor: Colors.red.withOpacity(0.7),
         colorText: Colors.white,
       );

@@ -27,7 +27,6 @@ class LibraryScreen extends StatelessWidget {
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
-      print('Error loading playlists: $e');
     } finally {
       isLoading.value = false;
     }
@@ -201,15 +200,16 @@ class LibraryScreen extends StatelessWidget {
           TextButton(
             onPressed: () async {
               try {
-                final success = await _playlistService.deletePlaylist(playlist.id);
-                
+                final success =
+                    await _playlistService.deletePlaylist(playlist.id);
+
                 // Đóng tất cả dialog đang mở
                 Get.until((route) => !Get.isDialogOpen!);
-                
+
                 if (success) {
                   // Xóa khỏi danh sách local
                   playlists.removeWhere((p) => p.id == playlist.id);
-                  
+
                   Get.snackbar(
                     'Success',
                     'Playlist deleted successfully',
@@ -231,7 +231,7 @@ class LibraryScreen extends StatelessWidget {
               } catch (e) {
                 // Đóng tất cả dialog trong trường hợp lỗi
                 Get.until((route) => !Get.isDialogOpen!);
-                
+
                 print('Error during delete: $e');
                 Get.snackbar(
                   'Error',
@@ -343,7 +343,8 @@ class LibraryScreen extends StatelessWidget {
                               ),
                               SizedBox(height: 8),
                               ElevatedButton(
-                                onPressed: () => _showCreatePlaylistDialog(context),
+                                onPressed: () =>
+                                    _showCreatePlaylistDialog(context),
                                 child: Text('Create Playlist'),
                               ),
                             ],

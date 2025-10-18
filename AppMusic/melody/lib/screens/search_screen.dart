@@ -8,7 +8,6 @@ import 'package:melody/models/search_result.dart';
 import 'dart:async';
 import 'package:get/get.dart';
 import 'package:melody/screens/player_screen.dart';
-import 'package:melody/screens/home_screen.dart';
 import 'package:melody/provider/music_controller.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -22,9 +21,7 @@ class _SearchScreenState extends State<SearchScreen>
     with AutomaticKeepAliveClientMixin {
   final TextEditingController _searchController = TextEditingController();
   final MusicService _musicService = MusicService();
-  bool _isLoading = false;
   List<SearchResult> _searchResults = [];
-  String _error = '';
   Timer? _debounce;
   Timer? _clearTimer;
 
@@ -54,32 +51,24 @@ class _SearchScreenState extends State<SearchScreen>
         if (mounted) {
           setState(() {
             _searchResults = [];
-            _error = '';
           });
         }
       });
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-      _error = '';
-    });
+    setState(() {});
 
     try {
       final results = await _musicService.searchMusic(query);
       if (mounted) {
         setState(() {
           _searchResults = results.cast<SearchResult>();
-          _isLoading = false;
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _error = 'Có lỗi xảy ra khi tìm kiếm';
-          _isLoading = false;
-        });
+        setState(() {});
       }
     }
   }
@@ -138,21 +127,48 @@ class _SearchScreenState extends State<SearchScreen>
                       result: result,
                       onTap: () async {
                         final musicController = Get.find<MusicController>();
-                        Get.to(() => PlayerScreen(
-                              title: result.title,
-                              artist: result.artistName,
-                              imageUrl: result.displayImage,
-                              youtubeId: result.youtubeId,
-                            ));
 
-                        // Phát nhạc
-                        await musicController.loadAndPlayMusic(Music(
-                          id: result.id,
+                        // Create the music object with proper initialization
+                        final music = Music(
+                          id: null, // Changed from '' to null
                           title: result.title,
                           artistName: result.artistName,
                           youtubeId: result.youtubeId,
                           youtubeThumbnail: result.displayImage,
-                        ));
+                        );
+
+                        // Load audio first before navigating
+                        try {
+                          final audioUrl = await musicController
+                              .getAudioUrl(result.youtubeId);
+                          if (audioUrl == null || audioUrl.isEmpty) {
+                            Get.snackbar(
+                              'Error',
+                              'Could not load audio for this song',
+                              backgroundColor: Colors.red.withOpacity(0.7),
+                              colorText: Colors.white,
+                            );
+                            return;
+                          }
+
+                          // Navigate to player
+                          Get.to(() => PlayerScreen(
+                                title: result.title,
+                                artist: result.artistName,
+                                imageUrl: result.displayImage,
+                                youtubeId: result.youtubeId,
+                              ));
+
+                          // Then play the music
+                          await musicController.loadAndPlayMusic(music);
+                        } catch (e) {
+                          Get.snackbar(
+                            'Error',
+                            'Failed to play this song: $e',
+                            backgroundColor: Colors.red.withOpacity(0.7),
+                            colorText: Colors.white,
+                          );
+                        }
                       },
                     );
                   },
@@ -178,6 +194,14 @@ class SearchResultItem extends StatelessWidget {
     required this.result,
     this.onTap,
   }) : super(key: key);
+
+  // ✅ Add validation helper
+  bool _isValidSearchResult(SearchResult result) {
+    return result.title.isNotEmpty &&
+        result.artistName.isNotEmpty &&
+        result.youtubeId.isNotEmpty &&
+        result.displayImage.isNotEmpty;
+  }
 
   void _showOptions(BuildContext context) {
     showModalBottomSheet(
@@ -253,10 +277,9 @@ class SearchResultItem extends StatelessWidget {
                 // Tạo playlist chỉ với bài hát được chọn
                 List<Music> singleSongPlaylist = [
                   Music(
-                    id: '',
+                    id: null, // Changed from '' to null
                     title: result.title,
                     artistName: result.artistName,
-                    // displayImage: result.displayImage,
                     youtubeId: result.youtubeId,
                     youtubeThumbnail: result.displayImage,
                   )
@@ -311,7 +334,7 @@ class SearchResultItem extends StatelessWidget {
               onTap: () {
                 final musicController = Get.find<MusicController>();
                 musicController.addToQueue(Music(
-                  id: result.id,
+                  id: (result.id is int) ? result.id as int? : null,
                   title: result.title,
                   artistName: result.artistName,
                   youtubeId: result.youtubeId,
@@ -338,7 +361,7 @@ class SearchResultItem extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     return ListTile(
-      leading: Icon(icon, color: Colors.black),
+      leading: Icon(icon, color: Colors.white),
       title: Text(
         title,
         style: TextStyle(
@@ -388,10 +411,72 @@ class SearchResultItem extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       ),
       trailing: IconButton(
-        icon: Icon(Icons.more_vert, color: Colors.black),
+        icon: Icon(Icons.more_vert, color: Colors.white),
         onPressed: () => _showOptions(context),
       ),
-      onTap: onTap,
+      onTap: onTap ??
+          () async {
+            // ✅ Validate search result before proceeding
+            if (!_isValidSearchResult(result)) {
+              Get.snackbar(
+                'Error',
+                'Invalid song data',
+                backgroundColor: Colors.red.withOpacity(0.7),
+                colorText: Colors.white,
+              );
+              return;
+            }
+
+            final musicController = Get.find<MusicController>();
+
+            // ✅ Create music object preserving ID
+            final music = Music(
+              id: (result.id is int) ? result.id as int? : null,
+              title: result.title,
+              artistName: result.artistName,
+              youtubeId: result.youtubeId,
+              youtubeThumbnail: result.displayImage,
+            );
+
+            try {
+              // Validate YouTube ID before getting audio
+              if (result.youtubeId.isEmpty) {
+                throw Exception('Invalid YouTube ID');
+              }
+
+              final audioUrl =
+                  await musicController.getAudioUrl(result.youtubeId);
+
+              if (audioUrl == null || audioUrl.isEmpty) {
+                Get.snackbar(
+                  'Error',
+                  'Could not load audio for this song',
+                  backgroundColor: Colors.red.withOpacity(0.7),
+                  colorText: Colors.white,
+                );
+                return;
+              }
+
+              // Navigate to player
+              Get.to(() => PlayerScreen(
+                    title: result.title,
+                    artist: result.artistName,
+                    imageUrl: result.displayImage,
+                    youtubeId: result.youtubeId,
+                  ));
+
+              // Then play the music
+              await musicController.loadAndPlayMusic(music);
+            } catch (e) {
+              print('Error playing search result: $e');
+              Get.snackbar(
+                'Error',
+                'Failed to play this song. Please try again.',
+                backgroundColor: Colors.red.withOpacity(0.7),
+                colorText: Colors.white,
+              );
+            }
+          },
     );
   }
 }

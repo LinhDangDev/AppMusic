@@ -53,37 +53,42 @@ class MusicService {
 
   Future<List<Music>> getMusicRankings(String region) async {
     try {
-      print('Fetching rankings for region: $region');
       final response = await _dio.get(
-        '${ApiConstants.baseUrl}/api/music/rankings/$region',
+        '${ApiConstants.baseUrl}/api/rankings/region',
+        queryParameters: {'region': region},
         options: Options(
           headers: {'Accept': 'application/json'},
           validateStatus: (status) => status! < 500,
         ),
       );
 
-      print('Rankings response: ${response.data}');
-
-      if (response.statusCode == 200 && response.data['status'] == 'success') {
+      if (response.statusCode == 200) {
         final data = response.data['data'];
         if (data == null) {
-          print('No data in response');
           return [];
         }
 
-        final rankings = data['rankings'] as List?;
-        if (rankings == null) {
-          print('No rankings in data');
+        final rankings = data is List ? data : [data];
+        if (rankings.isEmpty) {
           return [];
         }
 
-        return rankings.map((item) => Music.fromJson(item)).toList();
+        return rankings
+            .map((item) {
+              try {
+                return Music.fromJson(item);
+              } catch (e) {
+                print('Error parsing music item: $e');
+                return null;
+              }
+            })
+            .whereType<Music>()
+            .toList();
       } else {
-        print('Error response: ${response.statusCode} - ${response.data}');
         return [];
       }
     } catch (e) {
-      print('Error getting rankings: $e');
+      print('Error getting music rankings: $e');
       return [];
     }
   }
@@ -170,11 +175,13 @@ class MusicService {
 
   Future<List<Music>> getRankings(String region) async {
     try {
-      final response =
-          await _dio.get('${ApiConstants.baseUrl}/api/music/rankings/$region');
+      final response = await _dio.get(
+        '${ApiConstants.baseUrl}/api/rankings/region',
+        queryParameters: {'region': region},
+      );
 
       if (response.statusCode == 200 && response.data['data'] != null) {
-        final List<dynamic> rankingsData = response.data['data']['rankings'];
+        final List<dynamic> rankingsData = response.data['data'];
         return rankingsData.map((json) => Music.fromJson(json)).toList();
       }
       return [];
@@ -186,36 +193,57 @@ class MusicService {
 
   Future<List<Music>> getBiggestHits(String region) async {
     try {
-      final response =
-          await _dio.get('${ApiConstants.baseUrl}/api/music/rankings/$region');
+      final response = await _dio.get(
+          '${ApiConstants.baseUrl}/api/rankings/region',
+          queryParameters: {'region': region});
 
-      if (response.statusCode == 200 && response.data['status'] == 'success') {
-        final rankingsData = response.data['data']['rankings'] as List;
-        return rankingsData.map((song) {
-          // Validate YouTube data
-          String youtubeId = _extractYoutubeId(song['youtube_url'] ?? '');
-          String thumbnail = song['youtube_thumbnail'] ?? '';
+      if (response.statusCode == 200 && response.data['data'] != null) {
+        final rankingsData = response.data['data'] as List?;
+        if (rankingsData == null || rankingsData.isEmpty) return [];
 
-          if (thumbnail.isEmpty && youtubeId.isNotEmpty) {
-            thumbnail = 'https://img.youtube.com/vi/$youtubeId/mqdefault.jpg';
-          }
+        return rankingsData
+            .map((song) {
+              if (song == null) return null;
 
-          return Music(
-            id: song['id'].toString(),
-            title: song['title'] ?? 'Unknown',
-            artistName: song['artist_name'] ?? 'Unknown Artist',
-            youtubeId: youtubeId,
-            youtubeThumbnail: thumbnail,
-            playCount: song['play_count']?.toString(),
-            position: song['position'],
-            duration: song['duration']?.toString(),
-            genre: (song['genres'] as List?)?.join(', '),
-          );
-        }).toList();
+              try {
+                String title = (song['title'] ?? 'Unknown').toString().trim();
+                String artistName =
+                    (song['artist_name'] ?? 'Unknown Artist').toString().trim();
+                String youtubeId = _extractYoutubeId(song['youtube_url'] ?? '');
+                String thumbnail = song['youtube_thumbnail'] ?? '';
+
+                if (title.isEmpty) {
+                  print('Warning: Empty title in ranking song');
+                  return null;
+                }
+
+                if (thumbnail.isEmpty && youtubeId.isNotEmpty) {
+                  thumbnail =
+                      'https://img.youtube.com/vi/$youtubeId/mqdefault.jpg';
+                }
+
+                return Music(
+                  id: song['id'] as int?,
+                  title: title,
+                  artistName: artistName,
+                  youtubeId: youtubeId,
+                  youtubeThumbnail: thumbnail,
+                  playCount: song['play_count'] as int? ?? 0,
+                  position: song['position'] as int?,
+                  duration: song['duration'] as int?,
+                  genre: (song['genres'] as List?)?.join(', '),
+                );
+              } catch (e) {
+                print('Error parsing ranking item: $e');
+                return null;
+              }
+            })
+            .whereType<Music>()
+            .toList();
       }
-      throw Exception('Failed to load rankings');
+      return [];
     } catch (e) {
-      print('Error loading rankings: $e');
+      print('Error getting biggest hits: $e');
       return [];
     }
   }

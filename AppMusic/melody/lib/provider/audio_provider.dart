@@ -79,9 +79,9 @@ class AudioProvider extends ChangeNotifier {
         await _audioPlayer.play();
 
         // Cập nhật thông tin bài hát
-        currentSongTitle = title;
-        currentArtist = artist;
-        currentImageUrl = imageUrl;
+        currentSongTitle = title ?? 'Unknown';
+        currentArtist = artist ?? 'Unknown Artist';
+        currentImageUrl = imageUrl ?? '';
         isPlaying = true;
 
         notifyListeners();
@@ -89,7 +89,6 @@ class AudioProvider extends ChangeNotifier {
         throw Exception('Could not get audio URL');
       }
     } catch (e) {
-      print('Error playing YouTube audio: $e');
       rethrow;
     }
   }
@@ -139,7 +138,7 @@ class AudioProvider extends ChangeNotifier {
       musicController.currentMusic.value = nextSong;
 
       await playYoutubeAudio(
-        nextSong.youtubeId,
+        nextSong.youtubeId ?? '',
         title: nextSong.title,
         artist: nextSong.artistName,
         imageUrl: nextSong.youtubeThumbnail,
@@ -178,7 +177,7 @@ class AudioProvider extends ChangeNotifier {
 
     final previousMusic = musicController.currentQueue[previousIndex];
     await playYoutubeAudio(
-      previousMusic.youtubeId,
+      previousMusic.youtubeId ?? '',
       title: previousMusic.title,
       artist: previousMusic.artistName,
       imageUrl: previousMusic.youtubeThumbnail,
@@ -302,7 +301,7 @@ class AudioProvider extends ChangeNotifier {
       musicController.currentQueue.clear();
       musicController.currentQueue.addAll(queue
           .map((song) => Music(
-                id: '', // Có thể bỏ qua vì không cần thiết cho việc phát nhạc
+                id: null, // Có thể bỏ qua vì không cần thiết cho việc phát nhạc
                 title: song['title']!,
                 artistName: song['artist']!,
                 // displayImage: song['imageUrl']!,

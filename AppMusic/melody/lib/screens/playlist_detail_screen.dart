@@ -4,8 +4,6 @@ import 'package:melody/models/music.dart';
 import 'package:melody/services/playlist_service.dart';
 import 'package:get/get.dart';
 import 'package:melody/screens/player_screen.dart';
-import 'package:melody/provider/audio_provider.dart';
-import 'package:provider/provider.dart';
 import 'package:melody/constants/app_colors.dart';
 import 'dart:ui';
 import 'package:melody/provider/music_controller.dart';
@@ -152,7 +150,7 @@ class PlaylistDetailScreen extends StatelessWidget {
                   leading: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: Image.network(
-                      getYoutubeThumbnail(song.youtubeId),
+                      getYoutubeThumbnail(song.youtubeId ?? ''),
                       width: 56,
                       height: 56,
                       fit: BoxFit.cover,
@@ -175,7 +173,7 @@ class PlaylistDetailScreen extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   subtitle: Text(
-                    song.artistName,
+                    song.artistName ?? 'Unknown Artist',
                     style: TextStyle(
                       color: Colors.grey[400],
                       fontSize: 14,
@@ -225,7 +223,6 @@ class PlaylistDetailScreen extends StatelessWidget {
                   style: TextStyle(color: Colors.white)),
               onTap: () {
                 Get.back();
-                // TODO: Implement add to playlist
               },
             ),
             ListTile(
@@ -234,7 +231,6 @@ class PlaylistDetailScreen extends StatelessWidget {
                   style: TextStyle(color: Colors.white)),
               onTap: () {
                 Get.back();
-                // TODO: Implement add to favorites
               },
             ),
           ],
@@ -248,9 +244,8 @@ class PlaylistDetailScreen extends StatelessWidget {
     if (playlist.imageUrl != null && playlist.imageUrl!.isNotEmpty) {
       return playlist.imageUrl!;
     } else if (songs.isNotEmpty) {
-      return getYoutubeThumbnail(songs[0].youtubeId);
+      return getYoutubeThumbnail(songs[0].youtubeId ?? '');
     } else {
-      // Fallback image URL hoặc có thể throw exception
       return 'https://example.com/default-playlist-image.jpg';
     }
   }
@@ -281,16 +276,30 @@ class PlaylistDetailScreen extends StatelessWidget {
 
   void _playSong(BuildContext context, Music song, int index) {
     final musicController = Get.find<MusicController>();
+
+    // Set up queue first
     musicController.setCurrentQueue(
-      playlist: songs,
-      currentIndex: index,
-      playlistName: playlist.name
-    );
+        playlist: songs, currentIndex: index, playlistName: playlist.name);
+
+    // Ensure isQueueMode is set to true (queue is active)
+    musicController.isQueueMode.value = true;
+
+    // Navigate to player
     Get.to(() => PlayerScreen(
-      title: song.title,
-      artist: song.artistName,
-      imageUrl: song.youtubeThumbnail,
-      youtubeId: song.youtubeId,
-    ));
+          title: song.title,
+          artist: song.artistName ?? 'Unknown Artist',
+          imageUrl: song.youtubeThumbnail ?? '',
+          youtubeId: song.youtubeId ?? '',
+        ));
+
+    // Load and play music
+    musicController.loadAndPlayMusic(song).catchError((error) {
+      Get.snackbar(
+        'Error',
+        'Failed to play song: $error',
+        backgroundColor: Colors.red.withOpacity(0.7),
+        colorText: Colors.white,
+      );
+    });
   }
 }

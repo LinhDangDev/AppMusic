@@ -1,5 +1,4 @@
 import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'dart:ui';
@@ -7,12 +6,18 @@ import 'package:get/get.dart';
 import 'player_screen.dart';
 import 'package:melody/constants/app_colors.dart';
 import 'package:melody/widgets/bottom_player_nav.dart';
-import 'package:melody/models/genre.dart';
 import 'package:melody/models/music.dart';
 import 'package:melody/provider/music_controller.dart';
 
 class HomeScreen extends GetView<MusicController> {
   const HomeScreen({Key? key}) : super(key: key);
+
+  // ✅ Add validation helper
+  bool _isValidMusic(Music music) {
+    return music.title.isNotEmpty &&
+        (music.youtubeId?.isNotEmpty ?? false) &&
+        (music.artistName?.isNotEmpty ?? false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,8 +78,6 @@ class HomeScreen extends GetView<MusicController> {
                         _buildBiggestHits(),
                         const SizedBox(height: 32),
                         _buildRecentlyPlayed(context),
-                        const SizedBox(height: 32),
-                        _buildGenres(),
                       ],
                     ),
                   ),
@@ -244,7 +247,12 @@ class HomeScreen extends GetView<MusicController> {
               return Center(child: CircularProgressIndicator());
             }
 
-            final suggestedSongs = controller.rankings.take(5).toList();
+            // ✅ Filter only valid songs
+            final suggestedSongs = controller.rankings
+                .take(5)
+                .where((m) => _isValidMusic(m))
+                .toList();
+
             if (suggestedSongs.isEmpty) {
               return Center(
                 child: Text(
@@ -260,8 +268,25 @@ class HomeScreen extends GetView<MusicController> {
               itemCount: suggestedSongs.length,
               itemBuilder: (context, index) {
                 final music = suggestedSongs[index];
+
+                // ✅ Skip if validation fails
+                if (!_isValidMusic(music)) {
+                  return SizedBox.shrink();
+                }
+
                 return GestureDetector(
                   onTap: () {
+                    // ✅ Validate before playing
+                    if (!_isValidMusic(music)) {
+                      Get.snackbar(
+                        'Error',
+                        'Invalid song data',
+                        backgroundColor: Colors.red.withOpacity(0.7),
+                        colorText: Colors.white,
+                      );
+                      return;
+                    }
+
                     controller.playMusic(music,
                         playlist: suggestedSongs,
                         currentIndex: index,
@@ -275,19 +300,21 @@ class HomeScreen extends GetView<MusicController> {
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: Image.network(
-                            music.youtubeThumbnail,
+                          child: Container(
                             width: 140,
                             height: 140,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                width: 140,
-                                height: 140,
-                                color: Colors.grey[300],
-                                child: Icon(Icons.music_note, size: 50),
-                              );
-                            },
+                            color: Colors.grey[300],
+                            child: music.youtubeThumbnail?.isNotEmpty == true
+                                ? Image.network(
+                                    music.youtubeThumbnail!,
+                                    width: 140,
+                                    height: 140,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return _buildPlaceholderImage();
+                                    },
+                                  )
+                                : _buildPlaceholderImage(),
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -302,7 +329,7 @@ class HomeScreen extends GetView<MusicController> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          music.artistName,
+                          music.artistName ?? 'Unknown Artist',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -372,10 +399,10 @@ class HomeScreen extends GetView<MusicController> {
                     if (actualIndex >= itemCount) return Container();
                     final music = controller.rankings[actualIndex];
                     return RecentMusicCard(
-                      imageUrl: music.youtubeThumbnail,
+                      imageUrl: music.youtubeThumbnail ?? '',
                       title: music.title,
-                      subtitle: music.artistName,
-                      youtubeId: music.youtubeId,
+                      subtitle: music.artistName ?? 'Unknown Artist',
+                      youtubeId: music.youtubeId ?? '',
                     );
                   },
                 );
@@ -431,7 +458,11 @@ class HomeScreen extends GetView<MusicController> {
             return Center(child: CircularProgressIndicator());
           }
 
-          if (controller.rankings.isEmpty) {
+          // ✅ Filter only valid rankings
+          final validRankings =
+              controller.rankings.where((m) => _isValidMusic(m)).toList();
+
+          if (validRankings.isEmpty) {
             return Center(
               child: Text(
                 'No rankings available',
@@ -443,9 +474,15 @@ class HomeScreen extends GetView<MusicController> {
           return ListView.builder(
             shrinkWrap: true,
             physics: NeverScrollableScrollPhysics(),
-            itemCount: controller.rankings.length,
+            itemCount: validRankings.length,
             itemBuilder: (context, index) {
-              final music = controller.rankings[index];
+              final music = validRankings[index];
+
+              // ✅ Validate before rendering
+              if (!_isValidMusic(music)) {
+                return SizedBox.shrink();
+              }
+
               return ListTile(
                 leading: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -462,20 +499,27 @@ class HomeScreen extends GetView<MusicController> {
                     ),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(4),
-                      child: Image.network(
-                        music.youtubeThumbnail,
+                      child: Container(
                         width: 50,
                         height: 50,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            width: 50,
-                            height: 50,
-                            color: Colors.grey[300],
-                            child:
-                                Icon(Icons.music_note, color: Colors.grey[700]),
-                          );
-                        },
+                        color: Colors.grey[300],
+                        child: music.youtubeThumbnail?.isNotEmpty == true
+                            ? Image.network(
+                                music.youtubeThumbnail!,
+                                width: 50,
+                                height: 50,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    width: 50,
+                                    height: 50,
+                                    color: Colors.grey[300],
+                                    child: Icon(Icons.music_note,
+                                        color: Colors.grey[700]),
+                                  );
+                                },
+                              )
+                            : Icon(Icons.music_note, color: Colors.grey[700]),
                       ),
                     ),
                   ],
@@ -490,7 +534,7 @@ class HomeScreen extends GetView<MusicController> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 subtitle: Text(
-                  music.artistName,
+                  music.artistName ?? 'Unknown Artist',
                   style: TextStyle(
                     color: Colors.grey[700],
                   ),
@@ -502,10 +546,14 @@ class HomeScreen extends GetView<MusicController> {
                   onSelected: (value) {
                     switch (value) {
                       case 'play':
-                        controller.playMusic(music);
+                        if (_isValidMusic(music)) {
+                          controller.playMusic(music);
+                        }
                         break;
                       case 'queue':
-                        controller.addToQueue(music);
+                        if (_isValidMusic(music)) {
+                          controller.addToQueue(music);
+                        }
                         break;
                     }
                   },
@@ -523,7 +571,18 @@ class HomeScreen extends GetView<MusicController> {
                   ],
                 ),
                 onTap: () {
-                  if (music.youtubeId.isEmpty) {
+                  // ✅ Validate before playing
+                  if (!_isValidMusic(music)) {
+                    Get.snackbar(
+                      'Error',
+                      'Invalid song data',
+                      backgroundColor: Colors.red.withOpacity(0.7),
+                      colorText: Colors.white,
+                    );
+                    return;
+                  }
+
+                  if ((music.youtubeId ?? '').isEmpty) {
                     Get.snackbar(
                       'Error',
                       'Cannot play this song. Invalid video ID.',
@@ -542,233 +601,12 @@ class HomeScreen extends GetView<MusicController> {
     );
   }
 
-  void _showMusicOptions(BuildContext context, Music music) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.play_arrow),
-              title: const Text('Play Now'),
-              onTap: () {
-                Get.back();
-                _playMusic(music);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.queue_music),
-              title: const Text('Add to Queue'),
-              onTap: () {
-                controller.addToQueue(music);
-                Get.back();
-                Get.snackbar(
-                  'Added to Queue',
-                  music.title,
-                  snackPosition: SnackPosition.BOTTOM,
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _playMusic(Music music) {
-    final musicController = Get.find<MusicController>();
-    musicController.setCurrentQueue(
-        playlist: [music], currentIndex: 0, playlistName: "Now Playing");
-
-    Get.to(() => PlayerScreen(
-          title: music.title,
-          artist: music.artistName,
-          imageUrl: music.youtubeThumbnail,
-          youtubeId: music.youtubeId,
-        ));
-  }
-
-  Widget _buildGenres() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Browse genres',
-          style: TextStyle(
-            color: Colors.black,
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Obx(() {
-          if (controller.isLoading.value) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          }
-
-          if (controller.genres.isEmpty) {
-            return const Center(
-              child: Text('No genres available'),
-            );
-          }
-
-          final itemsPerPage = 6; // 3 rows × 2 columns
-          final pageCount = (controller.genres.length / itemsPerPage).ceil();
-
-          return SizedBox(
-            height: 200, // Chiều cao cố định cho 3 hàng
-            child: PageView.builder(
-              itemCount: pageCount,
-              itemBuilder: (context, pageIndex) {
-                final startIndex = pageIndex * itemsPerPage;
-                final endIndex =
-                    min(startIndex + itemsPerPage, controller.genres.length);
-                final pageItems =
-                    controller.genres.sublist(startIndex, endIndex);
-
-                return GridView.count(
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 2,
-                  childAspectRatio: 3,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  children: pageItems
-                      .map((genre) => GenreCard(genre: genre))
-                      .toList(),
-                );
-              },
-            ),
-          );
-        }),
-      ],
-    );
-  }
-
-  Widget _buildRankings() {
-    return Obx(() {
-      if (controller.rankings.isEmpty) {
-        return const Center(child: CircularProgressIndicator());
-      }
-
-      return ListView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: controller.rankings.length,
-        itemBuilder: (context, index) {
-          final music = controller.rankings[index];
-          return ListTile(
-            leading: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.network(
-                music.youtubeThumbnail,
-                width: 50,
-                height: 50,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    width: 50,
-                    height: 50,
-                    color: Colors.grey[800],
-                    child: const Icon(Icons.music_note, color: Colors.white),
-                  );
-                },
-              ),
-            ),
-            title: Text(
-              music.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: Text(
-              music.artistName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            onTap: () async {
-              try {
-                final musicController = Get.find<MusicController>();
-
-                // Cập nhật queue với danh sách rankings
-                musicController.currentQueue.assignAll(controller.rankings);
-                musicController.currentQueueIndex.value = index;
-
-                // Mở player screen
-                Get.to(
-                  () => PlayerScreen(
-                    title: music.title,
-                    artist: music.artistName,
-                    imageUrl: music.youtubeThumbnail,
-                    youtubeId: music.youtubeId,
-                  ),
-                );
-
-                // Phát nhạc
-                await musicController.playMusicDirectly(music);
-              } catch (e) {
-                print('Error playing ranking music: $e');
-                Get.snackbar(
-                  'Error',
-                  'Failed to play music. Please try again.',
-                  backgroundColor: Colors.red.withOpacity(0.7),
-                  colorText: Colors.white,
-                );
-              }
-            },
-          );
-        },
-      );
-    });
-  }
-
-  void _navigateToPlayer(Music song) async {
-    final controller = Get.find<MusicController>();
-
-    // Thêm vào queue và cập nhật index
-    controller.currentQueue.add(song);
-    controller.currentQueueIndex.value = controller.currentQueue.length - 1;
-
-    // Chuyển đến màn hình player
-    Get.to(() => PlayerScreen(
-          title: song.title,
-          artist: song.artistName,
-          imageUrl: song.youtubeThumbnail,
-          youtubeId: song.youtubeId,
-        ));
-
-    // Phát nhạc
-    await controller.loadAndPlayMusic(song);
-  }
-
-  Widget _buildImage(String? imageUrl) {
-    if (imageUrl == null || imageUrl.isEmpty) {
-      return Container(
-        color: Colors.grey[800],
-        child: Icon(Icons.music_note, color: Colors.white),
-      );
-    }
-
-    return Image.network(
-      imageUrl,
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) {
-        return Container(
-          color: Colors.grey[800],
-          child: Icon(Icons.music_note, color: Colors.white),
-        );
-      },
-    );
-  }
-
   void _playRankingSong(Music music, int index) async {
     try {
       final musicController = Get.find<MusicController>();
 
       // Kiểm tra YouTube ID trước khi phát
-      if (music.youtubeId.isEmpty) {
+      if ((music.youtubeId?.isEmpty ?? true)) {
         throw Exception('Invalid YouTube ID');
       }
 
@@ -778,16 +616,15 @@ class HomeScreen extends GetView<MusicController> {
 
       // Mở player screen
       Get.to(() => PlayerScreen(
-        title: music.title,
-        artist: music.artistName,
-        imageUrl: music.youtubeThumbnail,
-        youtubeId: music.youtubeId,
-      ));
+            title: music.title,
+            artist: music.artistName ?? 'Unknown Artist',
+            imageUrl: music.youtubeThumbnail ?? '',
+            youtubeId: music.youtubeId ?? '',
+          ));
 
       // Phát nhạc
       await musicController.loadAndPlayMusic(music);
     } catch (e) {
-      print('Error playing ranking song: $e');
       Get.snackbar(
         'Error',
         'Cannot play this song. Invalid video ID.',
@@ -842,7 +679,7 @@ class MusicCard extends StatelessWidget {
       return GestureDetector(
         onTap: () {
           final music = Music(
-            id: '', // Có thể để trống hoặc tạo một ID ngẫu nhiên
+            id: null,
             title: title,
             artistName: subtitle,
             youtubeId: youtubeId,
@@ -858,9 +695,9 @@ class MusicCard extends StatelessWidget {
           // Chuyển đến màn hình player
           Get.to(() => PlayerScreen(
                 title: music.title,
-                artist: music.artistName,
-                imageUrl: music.youtubeThumbnail,
-                youtubeId: music.youtubeId,
+                artist: music.artistName ?? 'Unknown',
+                imageUrl: music.youtubeThumbnail ?? '',
+                youtubeId: music.youtubeId ?? '',
               ));
 
           // Phát nhạc
@@ -880,10 +717,9 @@ class MusicCard extends StatelessWidget {
                     onTap: () {
                       final musicController = Get.find<MusicController>();
                       musicController.addToQueue(Music(
-                        id: '',
+                        id: null,
                         title: title,
                         artistName: subtitle,
-                        // displayImage: imageUrl,
                         youtubeId: youtubeId,
                         youtubeThumbnail: imageUrl,
                       ));
@@ -1058,7 +894,7 @@ class RecentMusicCard extends StatelessWidget {
             imageUrl.isNotEmpty &&
             youtubeId.isNotEmpty) {
           final music = Music(
-            id: '',
+            id: null,
             title: title,
             artistName: subtitle,
             youtubeThumbnail: imageUrl,
@@ -1072,9 +908,9 @@ class RecentMusicCard extends StatelessWidget {
 
           Get.to(() => PlayerScreen(
                 title: music.title,
-                artist: music.artistName,
-                imageUrl: music.youtubeThumbnail,
-                youtubeId: music.youtubeId,
+                artist: music.artistName ?? 'Unknown',
+                imageUrl: music.youtubeThumbnail ?? '',
+                youtubeId: music.youtubeId ?? '',
               ));
 
           // Phát nhạc
@@ -1145,98 +981,5 @@ class RecentMusicCard extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class GenreCard extends StatelessWidget {
-  final Genre genre;
-
-  const GenreCard({Key? key, required this.genre}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(4),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            _getRandomColor(),
-            _getRandomColor(),
-          ],
-        ),
-      ),
-      child: Row(
-        children: [
-          // Icon hoặc hình ảnh đại diện cho genre
-          Container(
-            width: 55,
-            height: 55,
-            decoration: BoxDecoration(
-              color: Colors.black12,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(4),
-                bottomLeft: Radius.circular(4),
-              ),
-            ),
-            child: Icon(
-              _getGenreIcon(genre.name),
-              color: Colors.white,
-              size: 24,
-            ),
-          ),
-          // Tên genre
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text(
-                genre.name,
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Hàm trả về màu ngẫu nhiên cho gradient
-  Color _getRandomColor() {
-    final colors = [
-      Colors.purple,
-      Colors.blue,
-      Colors.teal,
-      Colors.pink,
-      Colors.orange,
-      Colors.indigo,
-    ];
-    // Sử dụng tên genre làm seed để màu không thay đổi mỗi lần rebuild
-    final index = genre.name.hashCode % colors.length;
-    return colors[index].withOpacity(0.7);
-  }
-
-  // Hàm trả về icon phù hợp với từng thể loại
-  IconData _getGenreIcon(String genreName) {
-    switch (genreName.toLowerCase()) {
-      case 'pop':
-        return Icons.music_note;
-      case 'rock':
-        return Icons.audiotrack;
-      case 'jazz':
-        return Icons.piano;
-      case 'classical':
-        return Icons.queue_music;
-      case 'hip hop':
-        return Icons.mic;
-      default:
-        return Icons.album;
-    }
   }
 }

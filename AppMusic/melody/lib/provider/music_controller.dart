@@ -71,11 +71,9 @@ class MusicController extends GetxController {
     audioPlayer.playbackEventStream.listen(
       (event) {},
       onError: (Object e, StackTrace st) {
-        print('A stream error occurred: $e');
+        // Error handling
       },
     );
-
-    loadRandomMusic();
   }
 
   @override
@@ -150,14 +148,14 @@ class MusicController extends GetxController {
           }
 
           return Music(
-            id: song['id'].toString(),
+            id: int.tryParse(song['id']?.toString() ?? '') ?? 0,
             title: song['title'] ?? '',
             artistName: song['artist_name'] ?? '',
-            youtubeId: youtubeId, // Sử dụng youtube_id đã extract
+            youtubeId: youtubeId,
             youtubeThumbnail: thumbnail,
-            playCount: song['play_count']?.toString(),
-            position: song['position'],
-            duration: song['duration']?.toString(),
+            playCount: int.tryParse(song['play_count']?.toString() ?? '') ?? 0,
+            position: song['position'] as int?,
+            duration: int.tryParse(song['duration']?.toString() ?? '') ?? 0,
             genre: (song['genres'] as List?)?.join(', '),
           );
         }).toList();
@@ -165,7 +163,6 @@ class MusicController extends GetxController {
         rankings.addAll(newRankings);
       }
     } catch (e) {
-      print('Error loading rankings: $e');
       Get.snackbar(
         'Error',
         'Failed to load rankings',
@@ -192,7 +189,6 @@ class MusicController extends GetxController {
       }
       return '';
     } catch (e) {
-      print('Error extracting YouTube ID: $e');
       return '';
     }
   }
@@ -218,8 +214,11 @@ class MusicController extends GetxController {
     currentQueue.clear();
     currentQueue.addAll(playlist);
     currentQueueIndex.value = currentIndex;
-    isQueueMode.value = true;
-    if (playlist.isNotEmpty) {
+    isQueueMode.value = true; // Explicitly set to true
+    currentPlaylistName.value = playlistName;
+    if (playlist.isNotEmpty &&
+        currentIndex >= 0 &&
+        currentIndex < playlist.length) {
       updateCurrentMusic(playlist[currentIndex]);
     }
   }
@@ -229,17 +228,18 @@ class MusicController extends GetxController {
       try {
         final music = currentQueue[index];
         currentQueueIndex.value = index;
+        isQueueMode.value = true; // Ensure queue mode is active
 
         // Cập nhật UI ngay lập tức
         currentTitle.value = music.title;
-        currentArtist.value = music.artistName;
-        currentImageUrl.value = music.youtubeThumbnail;
-        currentYoutubeId.value = music.youtubeId;
+        currentArtist.value = music.artistName ?? '';
+        currentImageUrl.value = music.youtubeThumbnail ?? '';
+        currentYoutubeId.value = music.youtubeId ?? '';
         currentMusic.value = music;
         showMiniPlayer.value = true;
 
         // Load audio trong background
-        await _loadAudioUrl(music.youtubeId);
+        await _loadAudioUrl(music.youtubeId ?? '');
       } catch (e) {
         print('Error playing from queue: $e');
         Get.snackbar(
@@ -280,17 +280,31 @@ class MusicController extends GetxController {
       currentMusic.value = music;
       Get.to(() => PlayerScreen(
             title: music.title,
-            artist: music.artistName,
-            imageUrl: music.youtubeThumbnail,
-            youtubeId: music.youtubeId,
+            artist: music.artistName ?? '',
+            imageUrl: music.youtubeThumbnail ?? '',
+            youtubeId: music.youtubeId ?? '',
           ));
     }
   }
 
-  // Sửa lại phương thức playNext
+  // Sửa lại phương thức playNext with better error handling and bounds checking
   Future<void> playNext() async {
+    // Verify we're in queue mode and have valid state
+    if (!isQueueMode.value || currentQueue.isEmpty) {
+      print('Cannot play next: not in queue mode or queue is empty');
+      return;
+    }
+
     if (currentQueueIndex.value < currentQueue.length - 1) {
       currentQueueIndex.value++;
+
+      // Bounds check before accessing
+      if (currentQueueIndex.value >= currentQueue.length) {
+        print('Error: Queue index out of bounds');
+        currentQueueIndex.value = currentQueue.length - 1;
+        return;
+      }
+
       final nextMusic = currentQueue[currentQueueIndex.value];
 
       // Cập nhật UI trước
@@ -299,22 +313,47 @@ class MusicController extends GetxController {
       // Sau đó mới load và phát nhạc
       try {
         await changeMusic(
-          nextMusic.youtubeId,
+          nextMusic.youtubeId ?? '',
           nextMusic.title,
-          nextMusic.artistName,
-          nextMusic.youtubeThumbnail,
+          nextMusic.artistName ?? '',
+          nextMusic.youtubeThumbnail ?? '',
         );
         update(['player_screen', 'mini_player']);
       } catch (e) {
         print('Error playing next song: $e');
+        // Rollback on error
+        if (currentQueueIndex.value > 0) {
+          currentQueueIndex.value--;
+        }
+      }
+    } else {
+      // Reached end of queue
+      print('Reached end of queue');
+      if (repeatMode.value == RepeatMode.all) {
+        currentQueueIndex.value = 0;
+        await playNext();
       }
     }
   }
 
-  // Tương tự cho playPrevious
+  // Tương tự cho playPrevious with better error handling
   Future<void> playPrevious() async {
+    // Verify we're in queue mode and have valid state
+    if (!isQueueMode.value || currentQueue.isEmpty) {
+      print('Cannot play previous: not in queue mode or queue is empty');
+      return;
+    }
+
     if (currentQueueIndex.value > 0) {
       currentQueueIndex.value--;
+
+      // Bounds check before accessing
+      if (currentQueueIndex.value < 0) {
+        print('Error: Queue index below zero');
+        currentQueueIndex.value = 0;
+        return;
+      }
+
       final previousMusic = currentQueue[currentQueueIndex.value];
 
       // Cập nhật UI trước
@@ -323,20 +362,39 @@ class MusicController extends GetxController {
       // Sau đó mới load và phát nhạc
       try {
         await changeMusic(
-          previousMusic.youtubeId,
+          previousMusic.youtubeId ?? '',
           previousMusic.title,
-          previousMusic.artistName,
-          previousMusic.youtubeThumbnail,
+          previousMusic.artistName ?? '',
+          previousMusic.youtubeThumbnail ?? '',
         );
         update(['player_screen', 'mini_player']);
       } catch (e) {
         print('Error playing previous song: $e');
+        // Rollback on error
+        if (currentQueueIndex.value < currentQueue.length - 1) {
+          currentQueueIndex.value++;
+        }
       }
+    } else {
+      // At beginning of queue
+      print('Already at beginning of queue');
     }
   }
 
   Future<void> changeMusic(
       String youtubeId, String title, String artist, String imageUrl) async {
+    // Validate inputs
+    if (youtubeId.isEmpty) {
+      print('Error: Empty YouTube ID');
+      Get.snackbar(
+        'Error',
+        'Invalid video ID',
+        backgroundColor: Colors.red.withOpacity(0.7),
+        colorText: Colors.white,
+      );
+      return;
+    }
+
     try {
       isChangingAudio.value = true;
 
@@ -351,15 +409,21 @@ class MusicController extends GetxController {
 
       // Load audio với retry mechanism
       int retryCount = 0;
-      while (retryCount < 3) {
+      const maxRetries = 3;
+
+      while (retryCount < maxRetries) {
         try {
           final audioUrl = await getAudioUrl(youtubeId);
-          if (audioUrl != null) {
+          if (audioUrl != null && audioUrl.isNotEmpty) {
             await audioPlayer.setUrl(audioUrl);
             await audioPlayer.play();
-            break;
+            isChangingAudio.value = false;
+            return; // Success
           }
           retryCount++;
+          if (retryCount < maxRetries) {
+            await Future.delayed(Duration(seconds: 1));
+          }
         } catch (e) {
           print('Retry $retryCount failed: $e');
           await Future.delayed(Duration(seconds: 1));
@@ -367,18 +431,49 @@ class MusicController extends GetxController {
         }
       }
 
+      // All retries failed
       isChangingAudio.value = false;
+      throw Exception('Failed to load audio after $maxRetries retries');
     } catch (e) {
-      print('Error changing music: $e');
       isChangingAudio.value = false;
-      rethrow;
+      print('Error changing music: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to play song: ${e.toString()}',
+        backgroundColor: Colors.red.withOpacity(0.7),
+        colorText: Colors.white,
+      );
     }
   }
 
+  // Consolidated audio URL loading method with retry and fallback logic
   Future<String?> getAudioUrl(String youtubeId) async {
+    if (youtubeId.isEmpty) {
+      print('Error: Empty YouTube ID provided');
+      return null;
+    }
+
     try {
-      final url = await _musicService.getAudioUrl(youtubeId);
-      return url;
+      // First try: Use MusicService (faster, API-based)
+      try {
+        final url = await _musicService.getAudioUrl(youtubeId);
+        if (url != null && url.isNotEmpty) {
+          return url;
+        }
+      } catch (e) {
+        print('MusicService failed, trying fallback: $e');
+      }
+
+      // Fallback: Use youtube_explode (slower but reliable)
+      try {
+        final manifest = await _yt.videos.streamsClient.getManifest(youtubeId);
+        final audioStream = manifest.audioOnly.withHighestBitrate();
+        return audioStream.url.toString();
+      } catch (e) {
+        // Fallback audio extraction failed
+      }
+
+      return null;
     } catch (e) {
       print('Error getting audio URL: $e');
       return null;
@@ -541,7 +636,7 @@ class MusicController extends GetxController {
     if (!isQueueMode.value) {
       // Nếu chưa có queue, tạo queue mới với bài hát hiện tại và bài hát mới
       final currentSong = Music(
-        id: currentYoutubeId.value,
+        id: null,
         title: currentTitle.value,
         artistName: currentArtist.value,
         youtubeThumbnail: currentImageUrl.value,
@@ -570,12 +665,12 @@ class MusicController extends GetxController {
 
       // Cập nhật các thông tin khác
       currentTitle.value = song.title;
-      currentArtist.value = song.artistName;
-      currentImageUrl.value = song.youtubeThumbnail;
-      currentYoutubeId.value = song.youtubeId;
+      currentArtist.value = song.artistName ?? '';
+      currentImageUrl.value = song.youtubeThumbnail ?? '';
+      currentYoutubeId.value = song.youtubeId ?? '';
 
       // Phát nhạc
-      final audioUrl = await _getAudioUrl(song.youtubeId);
+      final audioUrl = await getAudioUrl(song.youtubeId ?? '');
       if (audioUrl != null) {
         await audioPlayer.stop();
         await audioPlayer.setUrl(audioUrl);
@@ -619,16 +714,23 @@ class MusicController extends GetxController {
     String? playlistName,
   }) async {
     try {
+      // Validate song has required fields
+      if (song.youtubeId == null || song.youtubeId!.isEmpty) {
+        throw Exception('Invalid song: missing YouTube ID');
+      }
+
       // Set current queue if playlist is provided
-      if (playlist != null) {
+      if (playlist != null && playlist.isNotEmpty) {
         currentQueue.assignAll(playlist);
         currentQueueIndex.value = currentIndex ?? 0;
         currentPlaylistName.value = playlistName ?? '';
+        isQueueMode.value = true; // Set queue mode
       } else {
         // If no playlist, create single song queue
         currentQueue.assignAll([song]);
         currentQueueIndex.value = 0;
         currentPlaylistName.value = '';
+        isQueueMode.value = true; // Set queue mode even for single song
       }
 
       // Update current music
@@ -636,15 +738,15 @@ class MusicController extends GetxController {
 
       // Update UI values
       currentTitle.value = song.title;
-      currentArtist.value = song.artistName;
-      currentImageUrl.value = song.youtubeThumbnail;
-      currentYoutubeId.value = song.youtubeId;
-
-      // Handle audio change
-      await handleAudioChange();
+      currentArtist.value = song.artistName ?? '';
+      currentImageUrl.value = song.youtubeThumbnail ?? '';
+      currentYoutubeId.value = song.youtubeId ?? '';
 
       // Show mini player
       showMiniPlayer.value = true;
+
+      // Handle audio change
+      await handleAudioChange();
     } catch (e) {
       print('Error playing music: $e');
       Get.snackbar(
@@ -656,28 +758,7 @@ class MusicController extends GetxController {
     }
   }
 
-  // Helper method để lấy audio URL từ YouTube ID
-  Future<String?> _getAudioUrl(String youtubeId) async {
-    try {
-      // Lấy manifest của video
-      final manifest = await _yt.videos.streamsClient.getManifest(youtubeId);
-
-      // Lấy audio stream với chất lượng cao nhất
-      final audioStream = manifest.audioOnly.withHighestBitrate();
-
-      if (audioStream != null) {
-        return audioStream.url.toString();
-      }
-
-      return null;
-    } catch (e) {
-      print('Error getting audio URL: $e');
-      return null;
-    }
-  }
-
   void updateQueueCount() {
-    final remainingSongs = currentQueue.length - (currentQueueIndex.value + 1);
     update(['queue_screen']);
   }
 
@@ -686,9 +767,9 @@ class MusicController extends GetxController {
       // Cập nhật thông tin bài hát hiện tại
       currentMusic.value = music;
       currentTitle.value = music.title;
-      currentArtist.value = music.artistName;
-      currentImageUrl.value = music.youtubeThumbnail;
-      currentYoutubeId.value = music.youtubeId;
+      currentArtist.value = music.artistName ?? '';
+      currentImageUrl.value = music.youtubeThumbnail ?? '';
+      currentYoutubeId.value = music.youtubeId ?? '';
 
       // Hiển thị mini player trước khi phát nhạc
       showMiniPlayer.value = true;
@@ -700,7 +781,7 @@ class MusicController extends GetxController {
       }
 
       // Lấy và phát audio
-      final audioUrl = await _getAudioUrl(music.youtubeId);
+      final audioUrl = await getAudioUrl(music.youtubeId ?? '');
       if (audioUrl != null) {
         await audioPlayer.stop();
         await audioPlayer.setUrl(audioUrl);
@@ -733,9 +814,9 @@ class MusicController extends GetxController {
     if (music != null) {
       currentMusic.value = music;
       currentTitle.value = music.title;
-      currentArtist.value = music.artistName;
-      currentImageUrl.value = music.youtubeThumbnail;
-      currentYoutubeId.value = music.youtubeId;
+      currentArtist.value = music.artistName ?? '';
+      currentImageUrl.value = music.youtubeThumbnail ?? '';
+      currentYoutubeId.value = music.youtubeId ?? '';
       update();
     }
   }
@@ -752,13 +833,14 @@ class MusicController extends GetxController {
         final musicData = response.data['data']['items'] as List;
         startedMusic.clear();
         startedMusic.addAll(musicData.map((song) => Music(
-              id: song['id'].toString(),
+              id: int.tryParse(song['id']?.toString() ?? '') ?? 0,
               title: song['title'] ?? 'Unknown',
               artistName: song['artist_name'] ?? 'Unknown Artist',
               youtubeId: song['youtube_url']?.split('watch?v=').last ?? '',
               youtubeThumbnail: song['youtube_thumbnail'] ?? '',
-              playCount: song['play_count']?.toString(),
-              duration: song['duration']?.toString(),
+              playCount:
+                  int.tryParse(song['play_count']?.toString() ?? '') ?? 0,
+              duration: int.tryParse(song['duration']?.toString() ?? '') ?? 0,
               genre: song['genres']?.join(', '),
               isLiked: false,
             )));
@@ -789,13 +871,13 @@ class MusicController extends GetxController {
           }
 
           return Music(
-            id: song['id'].toString(),
+            id: int.tryParse(song['id']?.toString() ?? '') ?? 0,
             title: song['title'] ?? '',
             artistName: song['artist_name'] ?? '',
             youtubeId: youtubeId,
             youtubeThumbnail: thumbnail,
-            playCount: song['play_count']?.toString(),
-            duration: song['duration']?.toString(),
+            playCount: int.tryParse(song['play_count']?.toString() ?? '') ?? 0,
+            duration: int.tryParse(song['duration']?.toString() ?? '') ?? 0,
             genre: (song['genres'] as List?)?.join(', '),
           );
         }).toList();
@@ -809,16 +891,32 @@ class MusicController extends GetxController {
 
   Future<void> loadAndPlayMusic(Music music) async {
     try {
+      // Validate music has required fields
+      if (music.youtubeId == null || music.youtubeId!.isEmpty) {
+        throw Exception('Invalid music: missing YouTube ID');
+      }
+
       isLoading.value = true;
       updateCurrentTrack(
         music.title,
-        music.artistName,
-        music.youtubeThumbnail,
-        music.youtubeId,
+        music.artistName ?? '',
+        music.youtubeThumbnail ?? '',
+        music.youtubeId ?? '',
       );
 
-      final audioUrl = await _musicService.getAudioUrl(music.youtubeId);
-      if (audioUrl != null) {
+      // Ensure the song is in the queue
+      if (currentQueue.isEmpty ||
+          (currentQueue.isNotEmpty &&
+              currentQueue[currentQueueIndex.value].youtubeId !=
+                  music.youtubeId)) {
+        // Add to queue if not already there
+        currentQueue.add(music);
+        currentQueueIndex.value = currentQueue.length - 1;
+        isQueueMode.value = true;
+      }
+
+      final audioUrl = await getAudioUrl(music.youtubeId ?? '');
+      if (audioUrl != null && audioUrl.isNotEmpty) {
         await audioPlayer.stop();
         await audioPlayer.setUrl(audioUrl);
         await audioPlayer.play();
@@ -832,7 +930,7 @@ class MusicController extends GetxController {
       print('Error playing music: $e');
       Get.snackbar(
         'Error',
-        'Cannot play this song',
+        'Cannot play this song: ${e.toString()}',
         backgroundColor: Colors.red.withOpacity(0.7),
         colorText: Colors.white,
       );
@@ -858,9 +956,9 @@ class MusicController extends GetxController {
       final music = currentMusic.value!;
       Get.to(() => PlayerScreen(
             title: music.title,
-            artist: music.artistName,
-            imageUrl: music.youtubeThumbnail,
-            youtubeId: music.youtubeId,
+            artist: music.artistName ?? '',
+            imageUrl: music.youtubeThumbnail ?? '',
+            youtubeId: music.youtubeId ?? '',
           ));
     }
   }
@@ -871,7 +969,7 @@ class MusicController extends GetxController {
 
       // Lưu lại trạng thái phát nhạc hiện tại
       final wasPlaying = isPlaying.value;
-      final currentSongId = currentYoutubeId.value;
+      final currentSongId = currentYoutubeId.value ?? '';
 
       // Cập nhật region và load danh sách mới
       selectedRegion.value = region;
@@ -879,8 +977,8 @@ class MusicController extends GetxController {
 
       // Nếu đang phát nhạc, tìm bài hát tương ứng trong danh sách mới
       if (wasPlaying && currentSongId.isNotEmpty) {
-        final newSongIndex =
-            rankings.indexWhere((song) => song.youtubeId == currentSongId);
+        final newSongIndex = rankings
+            .indexWhere((song) => (song.youtubeId ?? '') == currentSongId);
         if (newSongIndex != -1) {
           // Nếu tìm thấy bài hát, tiếp tục phát
           await playMusic(rankings[newSongIndex],
@@ -946,13 +1044,13 @@ class MusicController extends GetxController {
           }
 
           return Music(
-            id: song['id'].toString(),
+            id: int.tryParse(song['id']?.toString() ?? '') ?? 0,
             title: song['title'] ?? '',
             artistName: song['artist_name'] ?? '',
             youtubeId: youtubeId,
             youtubeThumbnail: thumbnail,
-            playCount: song['play_count']?.toString(),
-            duration: song['duration']?.toString(),
+            playCount: int.tryParse(song['play_count']?.toString() ?? '') ?? 0,
+            duration: int.tryParse(song['duration']?.toString() ?? '') ?? 0,
             genre: (song['genres'] as List?)?.join(', '),
           );
         }).toList();

@@ -3,12 +3,16 @@ import 'package:melody/screens/home_screen.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:melody/provider/audio_provider.dart';
+import 'package:melody/provider/music_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final audioProvider = AudioProvider();
   await audioProvider.initAudioHandler();
+
+  // Register MusicController with GetX
+  Get.put(MusicController());
 
   runApp(
     MultiProvider(
