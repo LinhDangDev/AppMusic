@@ -1,58 +1,82 @@
 services:
-  redis:
-    image: redis:alpine
-    container_name: app_music_redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
+    redis:
+        image: redis:alpine
+        container_name: app_music_redis
+        ports: ["6379:6379"]
+        volumes: [redis_data:/data]
+        networks: [appmusic_network]
 
-  postgres:
-    image: postgres:15-alpine
-    container_name: app_music_db
-    environment:
-      POSTGRES_DB: app_music
-      POSTGRES_USER: appmusic
-      POSTGRES_PASSWORD: appmusic123
-    volumes:
-      - ./init:/docker-entrypoint-initdb.d
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U appmusic"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    postgres:
+        image: postgres:15-alpine
+        container_name: app_music_db
+        environment:
+            POSTGRES_DB: app_music
+            POSTGRES_USER: appmusic
+            POSTGRES_PASSWORD: appmusic123
+        ports:
+            - "5433:5432"
+        volumes:
+            - ./init:/docker-entrypoint-initdb.d
+            - postgres_data:/var/lib/postgresql/data
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U appmusic -d app_music"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        networks: [appmusic_network]
 
-  app:
-    build: .
-    container_name: app_music_backend
-    environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: appmusic
-      DB_PASSWORD: appmusic123
-      DB_NAME: app_music
-      DB_TYPE: postgres
-      NODE_ENV: development
-      ITUNES_API: "https://itunes.apple.com/vn/rss/topsongs/limit=100/json"
-      ENABLE_CRON_SYNC: "true"
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      JWT_SECRET: your-super-secret-jwt-key-change-in-production
-    ports:
-      - "3000:3000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_started
-    restart: always
-    volumes:
-      - .:/usr/src/app
-      - /usr/src/app/node_modules
+    elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+        container_name: appmusic_elasticsearch
+        environment:
+            - discovery.type=single-node
+            - xpack.security.enabled=false
+            - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+        ports: ["9200:9200"]
+        volumes: [es_data:/usr/share/elasticsearch/data]
+        networks: [appmusic_network]
+        healthcheck:
+            test: ["CMD-SHELL", "wget -qO- http://localhost:9200/_cluster/health > /dev/null || exit 1"]
+            interval: 30s
+            timeout: 10s
+            retries: 5
+
+    app:
+        build: .
+        container_name: app_music_backend
+        environment:
+            DB_HOST: postgres
+            DB_PORT: 5432
+            DB_USER: appmusic
+            DB_PASSWORD: appmusic123
+            DB_NAME: app_music
+            DB_TYPE: postgres
+            NODE_ENV: development
+            ITUNES_API: "https://itunes.apple.com/vn/rss/topsongs/limit=100/json"
+            ENABLE_CRON_SYNC: "true"
+            REDIS_HOST: redis
+            REDIS_PORT: 6379
+            ELASTICSEARCH_URL: http://elasticsearch:9200
+            JWT_SECRET: lightinggod15723
+        ports: ["3000:3000"]
+        depends_on:
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_started
+            elasticsearch:
+                condition: service_started
+        restart: always
+        volumes:
+            - .:/usr/src/app
+            - /usr/src/app/node_modules
+        networks: [appmusic_network]
+
+networks:
+    appmusic_network:
+        driver: bridge
 
 volumes:
-  postgres_data:
-  redis_data:
+    postgres_data:
+    redis_data:
+    es_data:

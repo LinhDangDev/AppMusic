@@ -1,0 +1,415 @@
+### ======================================
+### AppMusic - Elasticsearch Test Suite
+### ======================================
+
+### 1. Check Elasticsearch Cluster Health
+GET http://localhost:9200/_cluster/health?pretty
+Accept: application/json
+
+### 2. Check Elasticsearch Info
+GET http://localhost:9200/
+Accept: application/json
+
+### 3. List All Indices
+GET http://localhost:9200/_cat/indices?v
+Accept: text/plain
+
+### 4. Check Node Info
+GET http://localhost:9200/_cat/nodes?v
+Accept: text/plain
+
+### ======================================
+### MUSIC INDEX OPERATIONS
+### ======================================
+
+### 5. Create Music Index
+PUT http://localhost:9200/music
+Content-Type: application/json
+
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "analysis": {
+      "analyzer": {
+        "autocomplete": {
+          "tokenizer": "autocomplete",
+          "filter": ["lowercase"]
+        }
+      },
+      "tokenizer": {
+        "autocomplete": {
+          "type": "edge_ngram",
+          "min_gram": 2,
+          "max_gram": 20,
+          "token_chars": ["letter", "digit"]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "id": { "type": "integer" },
+      "title": {
+        "type": "text",
+        "analyzer": "autocomplete",
+        "search_analyzer": "standard",
+        "fields": {
+          "keyword": { "type": "keyword" }
+        }
+      },
+      "artist_id": { "type": "integer" },
+      "artist_name": {
+        "type": "text",
+        "analyzer": "autocomplete",
+        "search_analyzer": "standard"
+      },
+      "album": { "type": "text" },
+      "duration": { "type": "integer" },
+      "play_count": { "type": "integer" },
+      "release_date": { "type": "date" },
+      "lyrics": { "type": "text" },
+      "source": { "type": "keyword" },
+      "created_at": { "type": "date" },
+      "updated_at": { "type": "date" }
+    }
+  }
+}
+
+### 6. Check Music Index Mapping
+GET http://localhost:9200/music/_mapping
+Accept: application/json
+
+### 7. Check Music Index Settings
+GET http://localhost:9200/music/_settings
+Accept: application/json
+
+### 8. Count Music Documents
+GET http://localhost:9200/music/_count
+Accept: application/json
+
+### 9. Get All Music (limit 10)
+GET http://localhost:9200/music/_search?size=10
+Accept: application/json
+
+### ======================================
+### ARTISTS INDEX OPERATIONS
+### ======================================
+
+### 10. Create Artists Index
+PUT http://localhost:9200/artists
+Content-Type: application/json
+
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "analysis": {
+      "analyzer": {
+        "autocomplete": {
+          "tokenizer": "autocomplete",
+          "filter": ["lowercase"]
+        }
+      },
+      "tokenizer": {
+        "autocomplete": {
+          "type": "edge_ngram",
+          "min_gram": 2,
+          "max_gram": 20,
+          "token_chars": ["letter", "digit"]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "id": { "type": "integer" },
+      "name": {
+        "type": "text",
+        "analyzer": "autocomplete",
+        "search_analyzer": "standard",
+        "fields": {
+          "keyword": { "type": "keyword" }
+        }
+      },
+      "bio": { "type": "text" },
+      "description": { "type": "text" },
+      "image_url": { "type": "keyword" },
+      "created_at": { "type": "date" },
+      "updated_at": { "type": "date" }
+    }
+  }
+}
+
+### 11. Check Artists Index
+GET http://localhost:9200/artists/_mapping
+Accept: application/json
+
+### ======================================
+### SEARCH QUERIES
+### ======================================
+
+### 12. Search All Music
+POST http://localhost:9200/music/_search
+Content-Type: application/json
+
+{
+  "query": {
+    "match_all": {}
+  },
+  "size": 20
+}
+
+### 13. Search Music by Title
+POST http://localhost:9200/music/_search
+Content-Type: application/json
+
+{
+  "query": {
+    "match": {
+      "title": "love"
+    }
+  },
+  "size": 10
+}
+
+### 14. Search Music by Artist Name
+POST http://localhost:9200/music/_search
+Content-Type: application/json
+
+{
+  "query": {
+    "match": {
+      "artist_name": "Taylor Swift"
+    }
+  }
+}
+
+### 15. Fuzzy Search (Typo Tolerance)
+POST http://localhost:9200/music/_search
+Content-Type: application/json
+
+{
+  "query": {
+    "multi_match": {
+      "query": "Taylr Swif",
+      "fields": ["title", "artist_name"],
+      "fuzziness": "AUTO"
+    }
+  }
+}
+
+### 16. Search with Sorting by Play Count
+POST http://localhost:9200/music/_search
+Content-Type: application/json
+
+{
+  "query": {
+    "match_all": {}
+  },
+  "sort": [
+    { "play_count": "desc" }
+  ],
+  "size": 10
+}
+
+### 17. Autocomplete Search
+POST http://localhost:9200/music/_search
+Content-Type: application/json
+
+{
+  "query": {
+    "multi_match": {
+      "query": "shape",
+      "fields": ["title", "artist_name"],
+      "type": "phrase_prefix"
+    }
+  },
+  "size": 5
+}
+
+### 18. Complex Search with Filters
+POST http://localhost:9200/music/_search
+Content-Type: application/json
+
+{
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "multi_match": {
+            "query": "love",
+            "fields": ["title^3", "artist_name^2", "lyrics"]
+          }
+        }
+      ],
+      "filter": [
+        {
+          "range": {
+            "play_count": {
+              "gte": 1000
+            }
+          }
+        }
+      ]
+    }
+  },
+  "sort": [
+    { "_score": "desc" },
+    { "play_count": "desc" }
+  ]
+}
+
+### ======================================
+### MANUAL DATA INSERTION (FOR TESTING)
+### ======================================
+
+### 19. Insert Test Music Document
+POST http://localhost:9200/music/_doc/1
+Content-Type: application/json
+
+{
+  "id": 1,
+  "title": "Shape of You",
+  "artist_id": 1,
+  "artist_name": "Ed Sheeran",
+  "album": "Divide",
+  "duration": 234,
+  "play_count": 5000000,
+  "source": "youtube",
+  "created_at": "2024-01-01T00:00:00Z",
+  "updated_at": "2024-01-01T00:00:00Z"
+}
+
+### 20. Insert Test Artist Document
+POST http://localhost:9200/artists/_doc/1
+Content-Type: application/json
+
+{
+  "id": 1,
+  "name": "Ed Sheeran",
+  "bio": "English singer-songwriter",
+  "description": "One of the world's best-selling music artists",
+  "created_at": "2024-01-01T00:00:00Z",
+  "updated_at": "2024-01-01T00:00:00Z"
+}
+
+### 21. Bulk Insert Multiple Songs
+POST http://localhost:9200/_bulk
+Content-Type: application/x-ndjson
+
+{"index":{"_index":"music","_id":"2"}}
+{"id":2,"title":"Blank Space","artist_id":2,"artist_name":"Taylor Swift","album":"1989","duration":231,"play_count":4500000,"source":"youtube","created_at":"2024-01-01T00:00:00Z"}
+{"index":{"_index":"music","_id":"3"}}
+{"id":3,"title":"Shake It Off","artist_id":2,"artist_name":"Taylor Swift","album":"1989","duration":219,"play_count":4200000,"source":"youtube","created_at":"2024-01-01T00:00:00Z"}
+{"index":{"_index":"music","_id":"4"}}
+{"id":4,"title":"Perfect","artist_id":1,"artist_name":"Ed Sheeran","album":"Divide","duration":263,"play_count":3800000,"source":"youtube","created_at":"2024-01-01T00:00:00Z"}
+
+### ======================================
+### UPDATE & DELETE OPERATIONS
+### ======================================
+
+### 22. Update Play Count
+POST http://localhost:9200/music/_update/1
+Content-Type: application/json
+
+{
+  "doc": {
+    "play_count": 5000001
+  }
+}
+
+### 23. Delete Music Document
+DELETE http://localhost:9200/music/_doc/1
+
+### ======================================
+### INDEX MANAGEMENT
+### ======================================
+
+### 24. Delete Music Index (CAUTION!)
+DELETE http://localhost:9200/music
+
+### 25. Delete Artists Index (CAUTION!)
+DELETE http://localhost:9200/artists
+
+### 26. Refresh Index
+POST http://localhost:9200/music/_refresh
+
+### 27. Force Merge (Optimize)
+POST http://localhost:9200/music/_forcemerge?max_num_segments=1
+
+### ======================================
+### MONITORING & STATS
+### ======================================
+
+### 28. Check Index Stats
+GET http://localhost:9200/music/_stats
+Accept: application/json
+
+### 29. Check Cluster Stats
+GET http://localhost:9200/_cluster/stats?human&pretty
+Accept: application/json
+
+### 30. Check Index Size
+GET http://localhost:9200/_cat/indices/music?v&h=index,docs.count,store.size&s=store.size:desc
+Accept: text/plain
+
+### ======================================
+### AGGREGATIONS (ANALYTICS)
+### ======================================
+
+### 31. Top Artists by Song Count
+POST http://localhost:9200/music/_search
+Content-Type: application/json
+
+{
+  "size": 0,
+  "aggs": {
+    "top_artists": {
+      "terms": {
+        "field": "artist_name.keyword",
+        "size": 10
+      }
+    }
+  }
+}
+
+### 32. Average Play Count
+POST http://localhost:9200/music/_search
+Content-Type: application/json
+
+{
+  "size": 0,
+  "aggs": {
+    "avg_plays": {
+      "avg": {
+        "field": "play_count"
+      }
+    }
+  }
+}
+
+### 33. Play Count Distribution
+POST http://localhost:9200/music/_search
+Content-Type: application/json
+
+{
+  "size": 0,
+  "aggs": {
+    "play_ranges": {
+      "range": {
+        "field": "play_count",
+        "ranges": [
+          { "to": 100000 },
+          { "from": 100000, "to": 1000000 },
+          { "from": 1000000, "to": 5000000 },
+          { "from": 5000000 }
+        ]
+      }
+    }
+  }
+}
+
+### ======================================
+### END OF TEST SUITE
+### ======================================

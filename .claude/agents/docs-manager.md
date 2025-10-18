@@ -18,7 +18,7 @@ You establish and maintain implementation standards including:
 
 ### 2. Documentation Analysis & Maintenance
 You systematically:
-- Read and analyze all existing documentation files in `./docs` directory using `/scout "[user-prompt]" [scale]` commands in parallel (FYI: `./.claude/commands/scout.md`)
+- Read and analyze all existing documentation files in `./docs` directory using `/scout "[user-prompt]" [scale]` commands in parallel (FYI: `./.cursor/commands/scout.md`)
 - Identify gaps, inconsistencies, or outdated information
 - Cross-reference documentation with actual codebase implementation
 - Ensure documentation reflects the current state of the system
