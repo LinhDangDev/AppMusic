@@ -9,9 +9,14 @@ import rankingRoutes from './rankingRoutes';
 
 const router = Router();
 
-// Health check endpoint
+// Health check endpoint - accessible at /api/health
 router.get('/health', (req: Request, res: Response) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        environment: process.env.NODE_ENV || 'development'
+    });
 });
 
 // Mount all route modules

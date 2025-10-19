@@ -26,6 +26,9 @@ class RankingService {
 
     async getRankingsByRegion(region: string, limit: number = 50): Promise<any[]> {
         try {
+            // Normalize region to uppercase for consistency
+            const normalizedRegion = region.toUpperCase();
+
             const [rows]: any = await this.db.execute(
                 `SELECT
                     r.id,
@@ -43,15 +46,14 @@ class RankingService {
                     m.youtube_thumbnail,
                     m.youtube_url,
                     m.duration,
-                    m.play_count,
-                    m.genre
+                    m.play_count
                 FROM rankings r
                 JOIN music m ON r.music_id = m.id
                 LEFT JOIN artists a ON m.artist_id = a.id
-                WHERE r.region = $1
+                WHERE UPPER(r.region) = $1
                 ORDER BY r.rank_position ASC
                 LIMIT $2`,
-                [region, limit]
+                [normalizedRegion, limit]
             );
 
             return rows.map((row: any) => ({
@@ -70,8 +72,7 @@ class RankingService {
                 youtube_thumbnail: row.youtube_thumbnail,
                 youtube_url: row.youtube_url,
                 duration: row.duration,
-                play_count: row.play_count || 0,
-                genre: row.genre
+                play_count: row.play_count || 0
             }));
         } catch (error) {
             console.error('Error getting regional rankings:', error);
