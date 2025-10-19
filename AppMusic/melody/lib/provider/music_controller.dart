@@ -4,7 +4,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:melody/models/genre.dart';
 import 'package:melody/models/music.dart';
 import 'package:melody/services/music_service.dart';
-import 'package:melody/screens/player_screen.dart';
+import 'package:melody/screens/player_screen_musium.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import 'package:dio/dio.dart';
 import 'package:melody/constants/api_constants.dart';
@@ -54,12 +54,8 @@ class MusicController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    selectedRegion.value = 'VN';
-    loadBiggestHits('VN');
-    loadGenres();
-    loadData();
     _initAudioPlayer();
-    loadRandomMusic();
+    _loadInitialData();
     // Xử lý các sự kiện của audioPlayer
     audioPlayer.playerStateStream.listen((state) {
       if (state.processingState == ProcessingState.completed) {
@@ -74,6 +70,33 @@ class MusicController extends GetxController {
         // Error handling
       },
     );
+  }
+
+  /// Load initial data optimized to avoid blocking UI
+  Future<void> _loadInitialData() async {
+    try {
+      selectedRegion.value = 'VN';
+      isLoading.value = true;
+
+      // ✅ Load genres first (critical for UI)
+      await loadGenres();
+
+      // ✅ Then load rankings and other data IN PARALLEL
+      await Future.wait([
+        loadBiggestHits('VN'),
+        loadRandomMusic(),
+        loadData(),
+      ], eagerError: false)
+          .catchError((e) {
+        print('Error loading parallel data: $e');
+        return [];
+      });
+
+      isLoading.value = false;
+    } catch (e) {
+      print('Error loading initial data: $e');
+      isLoading.value = false;
+    }
   }
 
   @override
@@ -127,47 +150,60 @@ class MusicController extends GetxController {
   Future<void> loadBiggestHits(String region) async {
     try {
       isLoadingRankings.value = true;
-      final response =
-          await dio.get('${ApiConstants.baseUrl}/api/music/rankings/$region');
+      // ✅ FIXED: Use correct endpoint with query parameter
+      final response = await dio.get(
+        '${ApiConstants.baseUrl}/api/rankings/region',
+        queryParameters: {'region': region},
+      );
 
-      if (response.statusCode == 200 && response.data['status'] == 'success') {
-        final rankingsData = response.data['data']['rankings'] as List;
+      // ✅ FIXED: Correct response parsing - backend returns data array directly
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final rankingsData = response.data['data'] as List;
 
-        // Xóa danh sách cũ và thêm danh sách mới
+        // Clear old list and add new rankings
         rankings.clear();
 
-        // Chuyển đổi dữ liệu và thêm vào danh sách rankings
+        // Convert data and add to rankings list
         final newRankings = rankingsData.map((song) {
-          // Đảm bảo lấy được youtube_id từ youtube_url
-          String youtubeId = _extractYoutubeId(song['youtube_url'] ?? '');
+          // Extract youtube_id from youtube_url
+          String youtubeId = _extractYoutubeId(
+              song['youtube_url'] ?? song['youtube_id'] ?? '');
           String thumbnail = song['youtube_thumbnail'] ?? '';
 
-          // Nếu không có thumbnail nhưng có youtube_id thì tạo thumbnail từ youtube_id
+          // If no thumbnail but have youtube_id, create thumbnail from youtube_id
           if (thumbnail.isEmpty && youtubeId.isNotEmpty) {
             thumbnail = 'https://img.youtube.com/vi/$youtubeId/mqdefault.jpg';
           }
 
           return Music(
-            id: int.tryParse(song['id']?.toString() ?? '') ?? 0,
-            title: song['title'] ?? '',
-            artistName: song['artist_name'] ?? '',
+            id: song['music_id'] as int? ??
+                int.tryParse(song['id']?.toString() ?? '') ??
+                0,
+            title: (song['title'] ?? '').toString().trim(),
+            artistName:
+                (song['artist_name'] ?? 'Unknown Artist').toString().trim(),
             youtubeId: youtubeId,
             youtubeThumbnail: thumbnail,
             playCount: int.tryParse(song['play_count']?.toString() ?? '') ?? 0,
-            position: song['position'] as int?,
+            position: song['position'] as int? ?? song['rank_position'] as int?,
             duration: int.tryParse(song['duration']?.toString() ?? '') ?? 0,
-            genre: (song['genres'] as List?)?.join(', '),
+            genre: song['genre']?.toString() ?? '',
           );
         }).toList();
 
         rankings.addAll(newRankings);
+        print('✅ Loaded ${newRankings.length} rankings for region: $region');
+      } else {
+        print('❌ Failed to load rankings: ${response.data}');
       }
     } catch (e) {
+      print('❌ Error loading biggest hits: $e');
       Get.snackbar(
         'Error',
-        'Failed to load rankings',
+        'Failed to load rankings: $e',
         backgroundColor: Colors.red.withOpacity(0.7),
         colorText: Colors.white,
+        duration: const Duration(seconds: 3),
       );
     } finally {
       isLoadingRankings.value = false;
@@ -272,18 +308,13 @@ class MusicController extends GetxController {
     }
   }
 
-  // Thêm phương thức để cập nhật UI khi chuyển bài
   void updatePlayerUI() {
     if (currentQueueIndex.value >= 0 &&
         currentQueueIndex.value < currentQueue.length) {
       final music = currentQueue[currentQueueIndex.value];
       currentMusic.value = music;
-      Get.to(() => PlayerScreen(
-            title: music.title,
-            artist: music.artistName ?? '',
-            imageUrl: music.youtubeThumbnail ?? '',
-            youtubeId: music.youtubeId ?? '',
-          ));
+      Get.to(() => PlayerScreenMusium());
+      update(['player_screen', 'mini_player']);
     }
   }
 
@@ -950,18 +981,6 @@ class MusicController extends GetxController {
 
   String get value => currentMusic.value?.title ?? '';
   bool get isNotEmpty => currentMusic.value != null;
-
-  void navigateToPlayer() {
-    if (currentMusic.value != null) {
-      final music = currentMusic.value!;
-      Get.to(() => PlayerScreen(
-            title: music.title,
-            artist: music.artistName ?? '',
-            imageUrl: music.youtubeThumbnail ?? '',
-            youtubeId: music.youtubeId ?? '',
-          ));
-    }
-  }
 
   Future<void> changeRegion(String region) async {
     try {

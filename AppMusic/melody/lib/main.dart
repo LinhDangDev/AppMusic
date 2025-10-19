@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:melody/screens/home_screen.dart';
+import 'package:melody/widgets/navigation/bottom_nav_bar_musium.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:melody/provider/audio_provider.dart';
 import 'package:melody/provider/music_controller.dart';
+import 'package:melody/constants/app_typography_musium.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,21 +30,21 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Create the Musium dark theme
+    final darkTheme = AppTypographyMusium.createDarkTheme();
+
     return GetMaterialApp(
-      title: 'Music App',
+      title: 'Musium',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        scaffoldBackgroundColor: Colors.black,
-        bottomSheetTheme: const BottomSheetThemeData(
-          backgroundColor: Colors.transparent,
-          modalBackgroundColor: Colors.transparent,
-        ),
-        useMaterial3: true,
-      ),
-      home: const HomeScreen(),
+      theme: darkTheme,
+      darkTheme: darkTheme,
+      themeMode: ThemeMode.dark, // Always use dark theme
+      home: const MainAppContainer(), // Use MainAppContainer for bottom nav
       routes: {
-        '/home': (context) => const HomeScreen(),
+        '/main': (context) => const MainAppContainer(),
+      },
+      builder: (context, child) {
+        return child ?? const SizedBox.shrink();
       },
     );
   }

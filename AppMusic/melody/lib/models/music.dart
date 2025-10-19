@@ -1,14 +1,15 @@
 import 'enums.dart';
 import 'genre.dart';
 
-// Music table model
+/// Core Music Model
+/// Represents a music track with all necessary metadata
 class Music {
   final int? id;
   final String title;
   final int? artistId;
   final String? artistName;
   final String? album;
-  final int? duration;
+  final int? duration; // Duration in seconds
   final DateTime? releaseDate;
   final String? youtubeThumbnail;
   final String? youtubeId;
@@ -22,7 +23,7 @@ class Music {
   final String? geniusId;
   final LyricsState lyricsState;
   final bool isLiked;
-  final int? position;
+  final int? position; // Chart position
   final String? genre;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -117,9 +118,113 @@ class Music {
         'created_at': createdAt?.toIso8601String(),
         'updated_at': updatedAt?.toIso8601String(),
       };
+
+  // ============================================================================
+  // COMPUTED PROPERTIES FOR UI
+  // ============================================================================
+
+  /// Get thumbnail URL - prefers high quality image
+  String? get imageSource => imageUrl ?? youtubeThumbnail;
+
+  /// Format duration as MM:SS
+  String get formattedDuration {
+    if (duration == null) return '00:00';
+    final minutes = duration! ~/ 60;
+    final seconds = duration! % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  /// Display name (title - artist)
+  String get displayName =>
+      '${title}${artistName != null ? ' - $artistName' : ''}';
+
+  /// Short display name (just title if short, else truncate)
+  String get shortDisplayName {
+    if (title.length > 30) {
+      return '${title.substring(0, 27)}...';
+    }
+    return title;
+  }
+
+  /// Artist display (fallback to 'Unknown Artist')
+  String get displayArtist => artistName ?? 'Unknown Artist';
+
+  /// Check if music has valid streaming source
+  bool get isPlayable =>
+      (youtubeId?.isNotEmpty ?? false) || (youtubeUrl?.isNotEmpty ?? false);
+
+  /// Check if music has metadata
+  bool get hasMetadata =>
+      (imageUrl?.isNotEmpty ?? false) ||
+      (youtubeThumbnail?.isNotEmpty ?? false) ||
+      (album?.isNotEmpty ?? false);
+
+  /// Create a copy with modified fields
+  Music copyWith({
+    int? id,
+    String? title,
+    int? artistId,
+    String? artistName,
+    String? album,
+    int? duration,
+    DateTime? releaseDate,
+    String? youtubeThumbnail,
+    String? youtubeId,
+    String? youtubeUrl,
+    String? imageUrl,
+    String? previewUrl,
+    MusicSource? source,
+    String? sourceId,
+    int? playCount,
+    String? lyrics,
+    String? geniusId,
+    LyricsState? lyricsState,
+    bool? isLiked,
+    int? position,
+    String? genre,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return Music(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      artistId: artistId ?? this.artistId,
+      artistName: artistName ?? this.artistName,
+      album: album ?? this.album,
+      duration: duration ?? this.duration,
+      releaseDate: releaseDate ?? this.releaseDate,
+      youtubeThumbnail: youtubeThumbnail ?? this.youtubeThumbnail,
+      youtubeId: youtubeId ?? this.youtubeId,
+      youtubeUrl: youtubeUrl ?? this.youtubeUrl,
+      imageUrl: imageUrl ?? this.imageUrl,
+      previewUrl: previewUrl ?? this.previewUrl,
+      source: source ?? this.source,
+      sourceId: sourceId ?? this.sourceId,
+      playCount: playCount ?? this.playCount,
+      lyrics: lyrics ?? this.lyrics,
+      geniusId: geniusId ?? this.geniusId,
+      lyricsState: lyricsState ?? this.lyricsState,
+      isLiked: isLiked ?? this.isLiked,
+      position: position ?? this.position,
+      genre: genre ?? this.genre,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Music &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          youtubeId == other.youtubeId;
+
+  @override
+  int get hashCode => id.hashCode ^ youtubeId.hashCode;
 }
 
-// Extended Music model with additional data from API
+/// Extended Music model with additional data from API
 class MusicWithDetails extends Music {
   final List<Genre>? genres;
   final int? favoriteCount;

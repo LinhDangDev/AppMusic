@@ -54,7 +54,7 @@ class MusicService {
   Future<List<Music>> getMusicRankings(String region) async {
     try {
       final response = await _dio.get(
-        '${ApiConstants.baseUrl}/api/rankings/region',
+        '/api/rankings/region',
         queryParameters: {'region': region},
         options: Options(
           headers: {'Accept': 'application/json'},
