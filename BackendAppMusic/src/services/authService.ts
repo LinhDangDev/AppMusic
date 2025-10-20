@@ -1,654 +1,658 @@
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
-import { PoolWithExecute } from '../config/database';
-import { User, EmailVerificationToken, PasswordResetToken, RefreshToken, LoginHistory, SecuritySettings } from '../types/database.types';
-import { createError } from '../utils/error';
-import db from '../config/database';
+import * as bcrypt from 'bcrypt';
+import * as jwt from 'jsonwebtoken';
+import { Pool } from 'pg';
+import { v4 as uuidv4 } from 'uu id';
+import * as nodemailer from 'nodemailer';
+import {
+    Auth,
+    ErrorCode,
+    JWTPayload,
+    DatabaseUser,
+} from '../types/api.types';
 
-/**
- * JWT Payload interface for token claims
- */
-interface JWTPayload {
-    id: number;
-    email: string;
-    name: string;
-    is_premium: boolean;
-    iat?: number;
-    exp?: number;
+interface AuthConfig {
+    jwtSecret: string;
+    jwtRefreshSecret: string;
+    accessTokenExpiry: number; // in minutes
+    refreshTokenExpiry: number; // in days
+    emailFrom: string;
+    emailService: any; // nodemailer transporter
 }
 
-/**
- * Registration payload
- */
-interface RegisterPayload {
-    email: string;
-    password: string;
-    name: string;
-}
+export class AuthService {
+    private pool: Pool;
+    private config: AuthConfig;
+    private readonly SALT_ROUNDS = 10;
+    private readonly MAX_FAILED_ATTEMPTS = 5;
+    private readonly LOCKOUT_DURATION = 30; // minutes
 
-/**
- * Login payload
- */
-interface LoginPayload {
-    email: string;
-    password: string;
-    ipAddress?: string;
-    userAgent?: string;
-}
-
-/**
- * Login response
- */
-interface LoginResponse {
-    user: {
-        id: number;
-        email: string;
-        name: string;
-        profile_pic_url?: string;
-        is_premium: boolean;
-        is_email_verified: boolean;
-    };
-    accessToken: string;
-    refreshToken: string;
-}
-
-/**
- * Auth Service - Handles authentication, JWT tokens, passwords, and security
- * Converts JavaScript auth logic to TypeScript with proper types and security
- */
-class AuthService {
-    private db: PoolWithExecute = db;
-    private readonly JWT_SECRET: string;
-    private readonly JWT_EXPIRES_IN: string = '15m';
-    private readonly REFRESH_TOKEN_EXPIRES_IN: string = '7d';
-    private readonly SALT_ROUNDS: number = 10;
-    private readonly MAX_FAILED_ATTEMPTS: number = 5;
-    private readonly ACCOUNT_LOCK_DURATION_MINUTES: number = 30;
-
-    constructor() {
-        this.JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
+    constructor(pool: Pool, config: AuthConfig) {
+        this.pool = pool;
+        this.config = config;
     }
 
     /**
-     * Register new user with validation
+     * Register new user
      */
-    async register(payload: RegisterPayload): Promise<{ id: number; email: string; name: string; message: string }> {
-        try {
-            const { email, password, name } = payload;
-
-            // Validate input
-            if (!email || !password || !name) {
-                throw createError('Email, password, and name are required', 400);
-            }
-
-            // Validate email format
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(email)) {
-                throw createError('Invalid email format', 400);
-            }
-
-            // Validate password strength
-            if (password.length < 8) {
-                throw createError('Password must be at least 8 characters', 400);
-            }
-
-            // Check if email already exists
-            const [existing]: any = await this.db.execute(
-                'SELECT id FROM users WHERE email = $1',
-                [email]
-            );
-
-            if (existing.length > 0) {
-                throw createError('Email already registered', 409);
-            }
-
-            // Hash password
-            const password_hash = await bcrypt.hash(password, this.SALT_ROUNDS);
-
-            // Create user
-            const [result]: any = await this.db.execute(
-                `INSERT INTO users (email, password_hash, name, status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, NOW(), NOW())
-         RETURNING id`,
-                [email, password_hash, name, 'ACTIVE']
-            );
-
-            const userId = result[0].id;
-
-            // Create security settings
-            await this.db.execute(
-                'INSERT INTO security_settings (user_id, created_at, updated_at) VALUES ($1, NOW(), NOW())',
-                [userId]
-            );
-
-            // Generate email verification token
-            const verificationToken = await this.generateEmailVerificationToken(userId);
-
-            // TODO: Send verification email
-            console.log(`Verification token for ${email}: ${verificationToken}`);
-
-            return {
-                id: userId,
-                email,
-                name,
-                message: 'User registered successfully. Please verify your email.'
+    async register(payload: Auth.RegisterRequest): Promise<Auth.AuthResponse> {
+        // Validate email format
+        if (!this.isValidEmail(payload.email)) {
+            throw {
+                code: ErrorCode.VALIDATION_ERROR,
+                message: 'Invalid email format',
+                statusCode: 400,
             };
-        } catch (error) {
-            console.error('Registration error:', error);
-            throw error;
         }
+
+        // Validate password strength
+        if (!this.isStrongPassword(payload.password)) {
+            throw {
+                code: ErrorCode.VALIDATION_ERROR,
+                message:
+                    'Password must be at least 8 characters with uppercase, lowercase, and numbers',
+                statusCode: 400,
+            };
+        }
+
+        // Check if email already exists
+        const existingUser = await this.pool.query(
+            'SELECT id FROM users WHERE LOWER(email) = LOWER($1)',
+            [payload.email]
+        );
+
+        if (existingUser.rows.length > 0) {
+            throw {
+                code: ErrorCode.EMAIL_ALREADY_EXISTS,
+                message: 'Email already registered',
+                statusCode: 409,
+            };
+        }
+
+        // Hash password
+        const passwordHash = await bcrypt.hash(payload.password, this.SALT_ROUNDS);
+
+        // Insert user
+        const result = await this.pool.query(
+            `INSERT INTO users (email, password_hash, name, is_email_verified)
+       VALUES ($1, $2, $3, false)
+       RETURNING id, email, name, is_premium`,
+            [payload.email, passwordHash, payload.name]
+        );
+
+        const user = result.rows[0];
+
+        // Create security settings record
+        await this.pool.query(
+            'INSERT INTO security_settings (user_id) VALUES ($1)',
+            [user.id]
+        );
+
+        // Generate verification token
+        const verificationToken = await this.generateEmailVerificationToken(user.id);
+
+        // Send verification email (async)
+        this.sendVerificationEmail(payload.email, payload.name, verificationToken).catch(
+            (err) => console.error('Failed to send verification email:', err)
+        );
+
+        // Generate tokens
+        const { accessToken, refreshToken } = await this.generateTokens(user);
+
+        return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            is_premium: user.is_premium,
+            accessToken,
+            refreshToken,
+        };
     }
 
     /**
-     * Login user with security checks
+     * Login user
      */
-    async login(payload: LoginPayload): Promise<LoginResponse> {
+    async login(
+        payload: Auth.LoginRequest,
+        ipAddress?: string,
+        userAgent?: string
+    ): Promise<Auth.AuthResponse> {
+        // Find user
+        const result = await this.pool.query(
+            'SELECT * FROM users WHERE LOWER(email) = LOWER($1)',
+            [payload.email]
+        );
+
+        const user = result.rows[0] as DatabaseUser;
+
+        if (!user) {
+            // Log failed login
+            await this.logLoginAttempt({
+                userId: null,
+                ipAddress,
+                userAgent,
+                status: 'FAILED',
+                reason: 'User not found',
+            });
+
+            throw {
+                code: ErrorCode.INVALID_CREDENTIALS,
+                message: 'Invalid email or password',
+                statusCode: 401,
+            };
+        }
+
+        // Check if account is locked
+        const securitySettings = await this.pool.query(
+            'SELECT * FROM security_settings WHERE user_id = $1',
+            [user.id]
+        );
+
+        const security = securitySettings.rows[0];
+
+        if (
+            security.account_locked_until &&
+            new Date(security.account_locked_until) > new Date()
+        ) {
+            throw {
+                code: ErrorCode.ACCOUNT_LOCKED,
+                message: 'Account locked due to too many failed login attempts',
+                statusCode: 403,
+            };
+        }
+
+        // Check email verification
+        if (!user.is_email_verified) {
+            throw {
+                code: ErrorCode.EMAIL_NOT_VERIFIED,
+                message: 'Please verify your email first',
+                statusCode: 403,
+            };
+        }
+
+        // Verify password
+        const isPasswordValid = await bcrypt.compare(
+            payload.password,
+            user.password_hash
+        );
+
+        if (!isPasswordValid) {
+            // Increment failed attempts
+            const newFailedAttempts = (security.failed_login_attempts || 0) + 1;
+            let lockoutTime = null;
+
+            if (newFailedAttempts >= this.MAX_FAILED_ATTEMPTS) {
+                lockoutTime = new Date(
+                    Date.now() + this.LOCKOUT_DURATION * 60 * 1000
+                );
+            }
+
+            await this.pool.query(
+                `UPDATE security_settings
+         SET failed_login_attempts = $1, last_failed_login = NOW(), account_locked_until = $2
+         WHERE user_id = $3`,
+                [newFailedAttempts, lockoutTime, user.id]
+            );
+
+            // Log failed login
+            await this.logLoginAttempt({
+                userId: user.id,
+                ipAddress,
+                userAgent,
+                status: 'FAILED',
+                reason: 'Invalid password',
+            });
+
+            throw {
+                code: ErrorCode.INVALID_CREDENTIALS,
+                message: 'Invalid email or password',
+                statusCode: 401,
+            };
+        }
+
+        // Reset failed attempts
+        await this.pool.query(
+            `UPDATE security_settings
+       SET failed_login_attempts = 0, last_failed_login = NULL, account_locked_until = NULL
+       WHERE user_id = $1`,
+            [user.id]
+        );
+
+        // Update last login
+        await this.pool.query(
+            'UPDATE users SET last_login = NOW() WHERE id = $1',
+            [user.id]
+        );
+
+        // Log successful login
+        await this.logLoginAttempt({
+            userId: user.id,
+            ipAddress,
+            userAgent,
+            status: 'SUCCESS',
+        });
+
+        // Generate tokens
+        const { accessToken, refreshToken } = await this.generateTokens(user);
+
+        // Store refresh token
+        await this.storeRefreshToken(user.id, refreshToken, ipAddress, userAgent);
+
+        return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            is_premium: user.is_premium,
+            accessToken,
+            refreshToken,
+        };
+    }
+
+    /**
+     * Refresh access token
+     */
+    async refreshToken(refreshToken: string): Promise<Auth.TokenRefreshResponse> {
         try {
-            const { email, password, ipAddress = 'unknown', userAgent = 'unknown' } = payload;
+            // Verify refresh token
+            const decoded = jwt.verify(
+                refreshToken,
+                this.config.jwtRefreshSecret
+            ) as JWTPayload;
 
-            // Get user by email with security settings
-            const [users]: any = await this.db.execute(
-                `SELECT u.*, ss.failed_login_attempts, ss.account_locked_until
-         FROM users u
-         LEFT JOIN security_settings ss ON u.id = ss.user_id
-         WHERE u.email = $1`,
-                [email]
+            // Check if token is revoked
+            const tokenResult = await this.pool.query(
+                'SELECT * FROM refresh_tokens WHERE token = $1 AND user_id = $2',
+                [refreshToken, decoded.id]
             );
 
-            const user = users[0];
-
-            // Check if account is locked
-            if (user && user.account_locked_until) {
-                const now = new Date();
-                const lockUntil = new Date(user.account_locked_until);
-
-                if (now < lockUntil) {
-                    const remainingMinutes = Math.ceil((lockUntil.getTime() - now.getTime()) / 60000);
-                    throw createError(
-                        `Account is locked. Try again in ${remainingMinutes} minutes.`,
-                        423
-                    );
-                } else {
-                    // Unlock account
-                    await this.unlockAccount(user.id);
-                }
+            if (
+                tokenResult.rows.length === 0 ||
+                tokenResult.rows[0].is_revoked
+            ) {
+                throw {
+                    code: ErrorCode.UNAUTHORIZED,
+                    message: 'Invalid or revoked refresh token',
+                    statusCode: 401,
+                };
             }
 
-            // Verify user exists
-            if (!user) {
-                await this.recordLoginAttempt(null, ipAddress, userAgent, 'FAILED', 'User not found');
-                throw createError('Invalid email or password', 401);
-            }
-
-            // Check if account is active
-            if (user.status !== 'ACTIVE') {
-                await this.recordLoginAttempt(user.id, ipAddress, userAgent, 'FAILED', 'Account not active');
-                throw createError('Account is not active', 403);
-            }
-
-            // Verify password
-            const isPasswordValid = await bcrypt.compare(password, user.password_hash);
-
-            if (!isPasswordValid) {
-                await this.handleFailedLogin(user.id, ipAddress, userAgent);
-                throw createError('Invalid email or password', 401);
-            }
-
-            // Reset failed login attempts
-            await this.resetFailedLoginAttempts(user.id);
-
-            // Update last login
-            await this.db.execute(
-                'UPDATE users SET last_login = NOW(), updated_at = NOW() WHERE id = $1',
-                [user.id]
+            // Get user
+            const userResult = await this.pool.query(
+                'SELECT * FROM users WHERE id = $1',
+                [decoded.id]
             );
 
-            // Record successful login
-            await this.recordLoginAttempt(user.id, ipAddress, userAgent, 'SUCCESS', null);
+            if (userResult.rows.length === 0) {
+                throw {
+                    code: ErrorCode.NOT_FOUND,
+                    message: 'User not found',
+                    statusCode: 404,
+                };
+            }
 
-            // Generate tokens
-            const accessToken = this.generateAccessToken(user);
-            const refreshToken = await this.generateRefreshToken(user.id, ipAddress, userAgent);
+            const user = userResult.rows[0];
+
+            // Generate new tokens
+            const { accessToken, refreshToken: newRefreshToken } =
+                await this.generateTokens(user);
+
+            // Revoke old refresh token
+            await this.pool.query(
+                'UPDATE refresh_tokens SET is_revoked = true WHERE id = $1',
+                [tokenResult.rows[0].id]
+            );
 
             return {
-                user: {
-                    id: user.id,
-                    email: user.email,
-                    name: user.name,
-                    profile_pic_url: user.profile_pic_url,
-                    is_premium: user.is_premium || false,
-                    is_email_verified: user.is_email_verified || false
-                },
                 accessToken,
-                refreshToken
+                refreshToken: newRefreshToken,
             };
         } catch (error) {
-            console.error('Login error:', error);
-            throw error;
+            throw {
+                code: ErrorCode.UNAUTHORIZED,
+                message: 'Invalid refresh token',
+                statusCode: 401,
+            };
         }
     }
 
     /**
-     * Refresh access token using refresh token
+     * Logout user
      */
-    async refreshAccessToken(refreshToken: string): Promise<{ accessToken: string }> {
-        try {
-            // Verify refresh token exists and is valid
-            const [tokens]: any = await this.db.execute(
-                `SELECT rt.*, u.email, u.name, u.is_premium, u.status
-         FROM refresh_tokens rt
-         JOIN users u ON rt.user_id = u.id
-         WHERE rt.token = $1 AND rt.is_revoked = false`,
-                [refreshToken]
-            );
-
-            if (tokens.length === 0) {
-                throw createError('Invalid refresh token', 401);
-            }
-
-            const tokenData = tokens[0];
-
-            // Check if token is expired
-            if (new Date(tokenData.expires_at) < new Date()) {
-                throw createError('Refresh token expired', 401);
-            }
-
-            // Check if user account is active
-            if (tokenData.status !== 'ACTIVE') {
-                throw createError('Account is not active', 403);
-            }
-
-            // Generate new access token
-            const user = {
-                id: tokenData.user_id,
-                email: tokenData.email,
-                name: tokenData.name,
-                is_premium: tokenData.is_premium
-            };
-
-            const accessToken = this.generateAccessToken(user);
-
-            return { accessToken };
-        } catch (error) {
-            console.error('Refresh token error:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Logout user by revoking refresh token
-     */
-    async logout(refreshToken: string): Promise<{ message: string }> {
-        try {
-            if (!refreshToken) {
-                return { message: 'Logged out successfully' };
-            }
-
+    async logout(userId: number, refreshToken?: string): Promise<void> {
+        if (refreshToken) {
             // Revoke refresh token
-            await this.db.execute(
-                'UPDATE refresh_tokens SET is_revoked = true WHERE token = $1',
-                [refreshToken]
+            await this.pool.query(
+                'UPDATE refresh_tokens SET is_revoked = true WHERE token = $1 AND user_id = $2',
+                [refreshToken, userId]
             );
-
-            return { message: 'Logged out successfully' };
-        } catch (error) {
-            console.error('Logout error:', error);
-            throw error;
         }
     }
 
     /**
-     * Change password for authenticated user
+     * Verify email
      */
-    async changePassword(userId: number, currentPassword: string, newPassword: string): Promise<{ message: string }> {
-        try {
-            // Validate new password
-            if (newPassword.length < 8) {
-                throw createError('New password must be at least 8 characters', 400);
-            }
+    async verifyEmail(token: string): Promise<void> {
+        const result = await this.pool.query(
+            'SELECT * FROM email_verification_tokens WHERE token = $1',
+            [token]
+        );
 
-            // Get current password hash
-            const [users]: any = await this.db.execute(
-                'SELECT password_hash FROM users WHERE id = $1',
-                [userId]
-            );
-
-            if (users.length === 0) {
-                throw createError('User not found', 404);
-            }
-
-            // Verify current password
-            const isPasswordValid = await bcrypt.compare(currentPassword, users[0].password_hash);
-
-            if (!isPasswordValid) {
-                throw createError('Current password is incorrect', 401);
-            }
-
-            // Hash new password
-            const newPasswordHash = await bcrypt.hash(newPassword, this.SALT_ROUNDS);
-
-            // Update password
-            await this.db.execute(
-                'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
-                [newPasswordHash, userId]
-            );
-
-            // Revoke all refresh tokens (force re-login on all devices)
-            await this.db.execute(
-                'UPDATE refresh_tokens SET is_revoked = true WHERE user_id = $1',
-                [userId]
-            );
-
-            return { message: 'Password changed successfully' };
-        } catch (error) {
-            console.error('Change password error:', error);
-            throw error;
+        if (result.rows.length === 0) {
+            throw {
+                code: ErrorCode.NOT_FOUND,
+                message: 'Invalid verification token',
+                statusCode: 404,
+            };
         }
-    }
 
-    /**
-     * Request password reset token
-     */
-    async requestPasswordReset(email: string): Promise<{ message: string }> {
-        try {
-            // Get user by email
-            const [users]: any = await this.db.execute(
-                'SELECT id FROM users WHERE email = $1',
-                [email]
-            );
+        const record = result.rows[0];
 
-            // Always return success to prevent email enumeration
-            if (users.length === 0) {
-                return { message: 'If the email exists, a reset link has been sent' };
-            }
-
-            const userId = users[0].id;
-
-            // Generate reset token
-            const resetToken = await this.generatePasswordResetToken(userId);
-
-            // TODO: Send password reset email
-            console.log(`Password reset token for ${email}: ${resetToken}`);
-
-            return { message: 'If the email exists, a reset link has been sent' };
-        } catch (error) {
-            console.error('Password reset request error:', error);
-            throw error;
+        // Check expiry
+        if (new Date(record.expires_at) < new Date()) {
+            throw {
+                code: ErrorCode.VALIDATION_ERROR,
+                message: 'Verification token has expired',
+                statusCode: 400,
+            };
         }
-    }
 
-    /**
-     * Reset password using verification token
-     */
-    async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
-        try {
-            // Validate new password
-            if (newPassword.length < 8) {
-                throw createError('Password must be at least 8 characters', 400);
-            }
+        // Update user
+        await this.pool.query(
+            'UPDATE users SET is_email_verified = true WHERE id = $1',
+            [record.user_id]
+        );
 
-            // Verify token
-            const [tokens]: any = await this.db.execute(
-                `SELECT user_id FROM password_reset_tokens
-         WHERE token = $1 AND is_used = false AND expires_at > NOW()`,
-                [token]
-            );
-
-            if (tokens.length === 0) {
-                throw createError('Invalid or expired reset token', 400);
-            }
-
-            const userId = tokens[0].user_id;
-
-            // Hash new password
-            const passwordHash = await bcrypt.hash(newPassword, this.SALT_ROUNDS);
-
-            // Update password
-            await this.db.execute(
-                'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
-                [passwordHash, userId]
-            );
-
-            // Mark token as used
-            await this.db.execute(
-                'UPDATE password_reset_tokens SET is_used = true WHERE token = $1',
-                [token]
-            );
-
-            // Revoke all refresh tokens
-            await this.db.execute(
-                'UPDATE refresh_tokens SET is_revoked = true WHERE user_id = $1',
-                [userId]
-            );
-
-            return { message: 'Password reset successfully' };
-        } catch (error) {
-            console.error('Password reset error:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Verify email with token
-     */
-    async verifyEmail(token: string): Promise<{ message: string }> {
-        try {
-            const [tokens]: any = await this.db.execute(
-                `SELECT user_id FROM email_verification_tokens
-         WHERE token = $1 AND expires_at > NOW()`,
-                [token]
-            );
-
-            if (tokens.length === 0) {
-                throw createError('Invalid or expired verification token', 400);
-            }
-
-            const userId = tokens[0].user_id;
-
-            // Update user as verified
-            await this.db.execute(
-                'UPDATE users SET is_email_verified = true, updated_at = NOW() WHERE id = $1',
-                [userId]
-            );
-
-            // Delete verification token
-            await this.db.execute(
-                'DELETE FROM email_verification_tokens WHERE token = $1',
-                [token]
-            );
-
-            return { message: 'Email verified successfully' };
-        } catch (error) {
-            console.error('Email verification error:', error);
-            throw error;
-        }
-    }
-
-    // ==================== HELPER METHODS ====================
-
-    /**
-     * Generate JWT access token with 15m expiration
-     */
-    generateAccessToken(user: { id: number; email: string; name: string; is_premium: boolean }): string {
-        return (jwt.sign as any)(
-            {
-                id: user.id,
-                email: user.email,
-                name: user.name,
-                is_premium: user.is_premium
-            } as JWTPayload,
-            this.JWT_SECRET,
-            { expiresIn: this.JWT_EXPIRES_IN }
+        // Delete token
+        await this.pool.query(
+            'DELETE FROM email_verification_tokens WHERE id = $1',
+            [record.id]
         );
     }
 
     /**
-     * Generate refresh token with 7d expiration
+     * Request password reset
      */
-    async generateRefreshToken(userId: number, ipAddress: string, userAgent: string): Promise<string> {
-        const token = crypto.randomBytes(64).toString('hex');
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
-
-        await this.db.execute(
-            `INSERT INTO refresh_tokens (user_id, token, expires_at, ip_address, device_info, created_at)
-       VALUES ($1, $2, $3, $4, $5, NOW())`,
-            [userId, token, expiresAt, ipAddress, userAgent]
+    async requestPasswordReset(email: string): Promise<void> {
+        const result = await this.pool.query(
+            'SELECT id, name FROM users WHERE LOWER(email) = LOWER($1)',
+            [email]
         );
 
-        return token;
+        if (result.rows.length === 0) {
+            // Don't reveal if email exists for security
+            return;
+        }
+
+        const user = result.rows[0];
+
+        // Generate reset token
+        const resetToken = uuidv4();
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+        await this.pool.query(
+            'INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
+            [user.id, resetToken, expiresAt]
+        );
+
+        // Send email
+        await this.sendPasswordResetEmail(email, user.name, resetToken);
     }
 
     /**
-     * Generate email verification token with 24h expiration
+     * Reset password
      */
-    async generateEmailVerificationToken(userId: number): Promise<string> {
-        const token = crypto.randomBytes(32).toString('hex');
-        const expiresAt = new Date();
-        expiresAt.setHours(expiresAt.getHours() + 24); // 24 hours
+    async resetPassword(token: string, newPassword: string): Promise<void> {
+        // Validate password strength
+        if (!this.isStrongPassword(newPassword)) {
+            throw {
+                code: ErrorCode.VALIDATION_ERROR,
+                message:
+                    'Password must be at least 8 characters with uppercase, lowercase, and numbers',
+                statusCode: 400,
+            };
+        }
 
-        await this.db.execute(
-            'INSERT INTO email_verification_tokens (user_id, token, expires_at, created_at) VALUES ($1, $2, $3, NOW())',
-            [userId, token, expiresAt]
+        const result = await this.pool.query(
+            'SELECT * FROM password_reset_tokens WHERE token = $1 AND is_used = false',
+            [token]
         );
 
-        return token;
+        if (result.rows.length === 0) {
+            throw {
+                code: ErrorCode.NOT_FOUND,
+                message: 'Invalid or expired reset token',
+                statusCode: 404,
+            };
+        }
+
+        const record = result.rows[0];
+
+        // Check expiry
+        if (new Date(record.expires_at) < new Date()) {
+            throw {
+                code: ErrorCode.VALIDATION_ERROR,
+                message: 'Reset token has expired',
+                statusCode: 400,
+            };
+        }
+
+        // Hash new password
+        const passwordHash = await bcrypt.hash(newPassword, this.SALT_ROUNDS);
+
+        // Update user password
+        await this.pool.query(
+            'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+            [passwordHash, record.user_id]
+        );
+
+        // Mark token as used
+        await this.pool.query(
+            'UPDATE password_reset_tokens SET is_used = true WHERE id = $1',
+            [record.id]
+        );
     }
 
     /**
-     * Generate password reset token with 1h expiration
+     * Change password (authenticated user)
      */
-    async generatePasswordResetToken(userId: number): Promise<string> {
-        const token = crypto.randomBytes(32).toString('hex');
-        const expiresAt = new Date();
-        expiresAt.setHours(expiresAt.getHours() + 1); // 1 hour
-
-        await this.db.execute(
-            'INSERT INTO password_reset_tokens (user_id, token, expires_at, created_at) VALUES ($1, $2, $3, NOW())',
-            [userId, token, expiresAt]
-        );
-
-        return token;
-    }
-
-    /**
-     * Record login attempt in history
-     */
-    async recordLoginAttempt(
-        userId: number | null,
-        ipAddress: string,
-        userAgent: string,
-        status: 'SUCCESS' | 'FAILED',
-        failureReason: string | null
+    async changePassword(
+        userId: number,
+        currentPassword: string,
+        newPassword: string
     ): Promise<void> {
-        await this.db.execute(
-            `INSERT INTO login_history (user_id, ip_address, user_agent, login_status, failure_reason, created_at)
-       VALUES ($1, $2, $3, $4, $5, NOW())`,
-            [userId, ipAddress, userAgent, status, failureReason]
-        );
-    }
+        // Get user
+        const result = await this.pool.query('SELECT * FROM users WHERE id = $1', [
+            userId,
+        ]);
 
-    /**
-     * Handle failed login attempt with account locking
-     */
-    async handleFailedLogin(userId: number, ipAddress: string, userAgent: string): Promise<void> {
-        // Record failed attempt
-        await this.recordLoginAttempt(userId, ipAddress, userAgent, 'FAILED', 'Invalid password');
-
-        // Increment failed login attempts
-        await this.db.execute(
-            `UPDATE security_settings
-       SET failed_login_attempts = failed_login_attempts + 1,
-           last_failed_login = NOW(),
-           updated_at = NOW()
-       WHERE user_id = $1`,
-            [userId]
-        );
-
-        // Check if account should be locked
-        const [settings]: any = await this.db.execute(
-            'SELECT failed_login_attempts FROM security_settings WHERE user_id = $1',
-            [userId]
-        );
-
-        if (settings[0].failed_login_attempts >= this.MAX_FAILED_ATTEMPTS) {
-            // Lock account for specified duration
-            const lockUntil = new Date();
-            lockUntil.setMinutes(lockUntil.getMinutes() + this.ACCOUNT_LOCK_DURATION_MINUTES);
-
-            await this.db.execute(
-                'UPDATE security_settings SET account_locked_until = $1, updated_at = NOW() WHERE user_id = $2',
-                [lockUntil, userId]
-            );
-
-            throw createError('Account locked due to multiple failed login attempts', 423);
+        if (result.rows.length === 0) {
+            throw {
+                code: ErrorCode.NOT_FOUND,
+                message: 'User not found',
+                statusCode: 404,
+            };
         }
-    }
 
-    /**
-     * Reset failed login attempts
-     */
-    async resetFailedLoginAttempts(userId: number): Promise<void> {
-        await this.db.execute(
-            `UPDATE security_settings
-       SET failed_login_attempts = 0,
-           account_locked_until = NULL,
-           updated_at = NOW()
-       WHERE user_id = $1`,
-            [userId]
+        const user = result.rows[0];
+
+        // Verify current password
+        const isValid = await bcrypt.compare(currentPassword, user.password_hash);
+
+        if (!isValid) {
+            throw {
+                code: ErrorCode.INVALID_CREDENTIALS,
+                message: 'Current password is incorrect',
+                statusCode: 401,
+            };
+        }
+
+        // Validate new password
+        if (!this.isStrongPassword(newPassword)) {
+            throw {
+                code: ErrorCode.VALIDATION_ERROR,
+                message:
+                    'New password must be at least 8 characters with uppercase, lowercase, and numbers',
+                statusCode: 400,
+            };
+        }
+
+        // Hash new password
+        const passwordHash = await bcrypt.hash(newPassword, this.SALT_ROUNDS);
+
+        // Update password
+        await this.pool.query(
+            'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+            [passwordHash, userId]
         );
     }
 
     /**
-     * Unlock account manually
+     * Helper: Generate JWT tokens
      */
-    async unlockAccount(userId: number): Promise<void> {
-        await this.db.execute(
-            `UPDATE security_settings
-       SET account_locked_until = NULL,
-           failed_login_attempts = 0,
-           updated_at = NOW()
-       WHERE user_id = $1`,
-            [userId]
+    private async generateTokens(user: DatabaseUser) {
+        const payload: JWTPayload = {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            is_premium: user.is_premium,
+        };
+
+        const accessToken = jwt.sign(payload, this.config.jwtSecret, {
+            expiresIn: `${this.config.accessTokenExpiry}m`,
+        });
+
+        const refreshToken = jwt.sign(payload, this.config.jwtRefreshSecret, {
+            expiresIn: `${this.config.refreshTokenExpiry}d`,
+        });
+
+        return { accessToken, refreshToken };
+    }
+
+    /**
+     * Helper: Store refresh token
+     */
+    private async storeRefreshToken(
+        userId: number,
+        token: string,
+        ipAddress?: string,
+        userAgent?: string
+    ): Promise<void> {
+        const expiresAt = new Date(
+            Date.now() + this.config.refreshTokenExpiry * 24 * 60 * 60 * 1000
+        );
+
+        await this.pool.query(
+            `INSERT INTO refresh_tokens (user_id, token, expires_at, device_info, ip_address)
+       VALUES ($1, $2, $3, $4, $5)`,
+            [userId, token, expiresAt, userAgent, ipAddress]
         );
     }
 
     /**
-     * Verify JWT access token validity
+     * Helper: Generate email verification token
      */
-    verifyAccessToken(token: string): JWTPayload {
-        try {
-            return jwt.verify(token, this.JWT_SECRET) as JWTPayload;
-        } catch (error: any) {
-            if (error.name === 'TokenExpiredError') {
-                throw createError('Access token expired', 401);
-            }
-            throw createError('Invalid access token', 401);
-        }
+    private async generateEmailVerificationToken(userId: number): Promise<string> {
+        const token = uuidv4();
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+        await this.pool.query(
+            'INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
+            [userId, token, expiresAt]
+        );
+
+        return token;
     }
 
     /**
-     * Cleanup expired tokens (run via cron job)
+     * Helper: Log login attempt
      */
-    async cleanupExpiredTokens(): Promise<void> {
-        try {
-            // Delete expired refresh tokens
-            await this.db.execute('DELETE FROM refresh_tokens WHERE expires_at < NOW()');
+    private async logLoginAttempt(data: {
+        userId: number | null;
+        ipAddress?: string;
+        userAgent?: string;
+        status: 'SUCCESS' | 'FAILED';
+        reason?: string;
+    }): Promise<void> {
+        await this.pool.query(
+            `INSERT INTO login_history (user_id, ip_address, user_agent, login_status, failure_reason)
+       VALUES ($1, $2, $3, $4, $5)`,
+            [data.userId, data.ipAddress, data.userAgent, data.status, data.reason]
+        );
+    }
 
-            // Delete expired verification tokens
-            await this.db.execute('DELETE FROM email_verification_tokens WHERE expires_at < NOW()');
+    /**
+     * Helper: Validate email format
+     */
+    private isValidEmail(email: string): boolean {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email);
+    }
 
-            // Delete used or expired password reset tokens
-            await this.db.execute(
-                'DELETE FROM password_reset_tokens WHERE expires_at < NOW() OR is_used = true'
-            );
+    /**
+     * Helper: Validate password strength
+     */
+    private isStrongPassword(password: string): boolean {
+        const minLength = 8;
+        const hasUppercase = /[A-Z]/.test(password);
+        const hasLowercase = /[a-z]/.test(password);
+        const hasNumber = /[0-9]/.test(password);
 
-            console.log('Expired tokens cleaned up successfully');
-        } catch (error) {
-            console.error('Token cleanup error:', error);
-        }
+        return (
+            password.length >= minLength &&
+            hasUppercase &&
+            hasLowercase &&
+            hasNumber
+        );
+    }
+
+    /**
+     * Helper: Send verification email
+     */
+    private async sendVerificationEmail(
+        email: string,
+        name: string,
+        token: string
+    ): Promise<void> {
+        const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${token}`;
+
+        const htmlContent = `
+      <h2>Welcome to AppMusic, ${name}!</h2>
+      <p>Please verify your email by clicking the link below:</p>
+      <a href="${verificationUrl}">${verificationUrl}</a>
+      <p>This link will expire in 24 hours.</p>
+    `;
+
+        await this.config.emailService.sendMail({
+            from: this.config.emailFrom,
+            to: email,
+            subject: 'Verify your AppMusic email',
+            html: htmlContent,
+        });
+    }
+
+    /**
+     * Helper: Send password reset email
+     */
+    private async sendPasswordResetEmail(
+        email: string,
+        name: string,
+        token: string
+    ): Promise<void> {
+        const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
+
+        const htmlContent = `
+      <h2>Password Reset Request</h2>
+      <p>Hi ${name},</p>
+      <p>We received a request to reset your password. Click the link below:</p>
+      <a href="${resetUrl}">${resetUrl}</a>
+      <p>This link will expire in 24 hours.</p>
+      <p>If you didn't request this, ignore this email.</p>
+    `;
+
+        await this.config.emailService.sendMail({
+            from: this.config.emailFrom,
+            to: email,
+            subject: 'Reset your AppMusic password',
+            html: htmlContent,
+        });
     }
 }
-
-export default new AuthService();

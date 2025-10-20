@@ -1,16 +1,22 @@
 import { Router } from 'express';
-import musicController from '../controllers/musicController';
-import { optionalAuth } from '../middleware/authMiddleware';
+import { MusicController } from '../controllers/musicController';
+import { Pool } from 'pg';
 
-const router = Router();
+const createMusicRoutes = (pool: Pool): Router => {
+    const router = Router();
+    const musicController = new MusicController(pool);
 
-router.get('/', musicController.getAllMusic);
-router.get('/search', musicController.searchMusic);
-router.get('/top', musicController.getTopMusic);
-router.get('/random', musicController.getRandomMusic);
-router.get('/artist/:artistId', musicController.getMusicByArtist);
-router.get('/genres', musicController.getMusicByGenres);
-router.get('/:id', musicController.getMusicById);
-router.post('/:id/play', optionalAuth, musicController.updatePlayCount);
+    // Public routes
+    router.get('/', (req, res) => musicController.getMusic(req, res));
+    router.get('/search', (req, res) => musicController.searchMusic(req, res));
+    router.get('/:id', (req, res) => musicController.getMusicById(req, res));
 
-export default router;
+    // Admin routes (would need admin middleware in production)
+    router.post('/', (req, res) => musicController.createMusic(req, res));
+    router.put('/:id', (req, res) => musicController.updateMusic(req, res));
+    router.delete('/:id', (req, res) => musicController.deleteMusic(req, res));
+
+    return router;
+};
+
+export default createMusicRoutes;

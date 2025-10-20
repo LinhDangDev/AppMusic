@@ -1,192 +1,307 @@
-import { Request, Response, NextFunction } from 'express';
-import authService from '../services/authService';
-import { getClientIp, getUserAgent } from '../middleware/authMiddleware';
+import { Request, Response } from 'express';
+import { AuthService } from '../services/authService';
+import { Auth, ApiResponse, ErrorCode } from '../types/api.types';
+import { Pool } from 'pg';
 
-/**
- * Authentication Controller - Handles auth endpoints
- */
-class AuthController {
+export class AuthController {
+    private authService: AuthService;
+
+    constructor(pool: Pool) {
+        this.authService = new AuthService(
+            pool,
+            {
+                jwtSecret: process.env.JWT_SECRET || 'your-super-secret-jwt-key',
+                jwtRefreshSecret: process.env.JWT_REFRESH_SECRET || 'your-super-secret-refresh-key',
+                accessTokenExpiry: 15, // 15 minutes
+                refreshTokenExpiry: 7, // 7 days
+                emailFrom: process.env.EMAIL_FROM || 'noreply@appmusic.com',
+                emailService: null, // Configure nodemailer here
+            }
+        );
+    }
+
     /**
-     * POST /api/auth/register - Register new user
+     * Register user
+     * POST /api/v1/auth/register
      */
-    async register(req: Request, res: Response, next: NextFunction): Promise<void> {
+    async register(req: Request, res: Response): Promise<void> {
         try {
             const { email, password, name } = req.body;
-            const result = await authService.register({ email, password, name });
-            res.status(201).json({ success: true, data: result });
-        } catch (error) {
-            next(error);
-        }
-    }
 
-    /**
-     * POST /api/auth/login - User login with security tracking
-     */
-    async login(req: Request, res: Response, next: NextFunction): Promise<void> {
-        try {
-            const { email, password } = req.body;
-            const ipAddress = getClientIp(req);
-            const userAgent = getUserAgent(req);
-
-            const result = await authService.login({ email, password, ipAddress, userAgent });
-
-            res.cookie('refreshToken', result.refreshToken, {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict',
-                maxAge: 7 * 24 * 60 * 60 * 1000
-            });
-
-            res.json({
-                success: true,
-                data: {
-                    user: result.user,
-                    accessToken: result.accessToken,
-                    refreshToken: result.refreshToken
-                }
-            });
-        } catch (error) {
-            next(error);
-        }
-    }
-
-    /**
-     * POST /api/auth/refresh - Refresh access token
-     */
-    async refresh(req: Request, res: Response, next: NextFunction): Promise<void> {
-        try {
-            const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
-
-            if (!refreshToken) {
-                res.status(401).json({ success: false, message: 'Refresh token required' });
+            // Validate required fields
+            if (!email || !password || !name) {
+                res.status(400).json({
+                    success: false,
+                    code: ErrorCode.VALIDATION_ERROR,
+                    message: 'Email, password, and name are required',
+                    statusCode: 400,
+                } as ApiResponse);
                 return;
             }
 
-            const result = await authService.refreshAccessToken(refreshToken);
-            res.json({ success: true, data: result });
-        } catch (error) {
-            next(error);
+            const result = await this.authService.register({
+                email,
+                password,
+                name,
+            });
+
+            res.status(201).json({
+                success: true,
+                data: result,
+                message: 'User registered successfully',
+                statusCode: 201,
+            } as ApiResponse);
+        } catch (error: any) {
+            this.handleError(error, res);
         }
     }
 
     /**
-     * POST /api/auth/logout - Logout user
+     * Login user
+     * POST /api/v1/auth/login
      */
-    async logout(req: Request, res: Response, next: NextFunction): Promise<void> {
+    async login(req: Request, res: Response): Promise<void> {
         try {
-            const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
-            await authService.logout(refreshToken);
-            res.clearCookie('refreshToken');
-            res.json({ success: true, message: 'Logged out successfully' });
-        } catch (error) {
-            next(error);
+            const { email, password } = req.body;
+
+            if (!email || !password) {
+                res.status(400).json({
+                    success: false,
+                    code: ErrorCode.VALIDATION_ERROR,
+                    message: 'Email and password are required',
+                    statusCode: 400,
+                } as ApiResponse);
+                return;
+            }
+
+            const ipAddress = req.ip || 'unknown';
+            const userAgent = req.get('user-agent') || 'unknown';
+
+            const result = await this.authService.login(
+                { email, password },
+                ipAddress,
+                userAgent
+            );
+
+            res.status(200).json({
+                success: true,
+                data: result,
+                message: 'Login successful',
+                statusCode: 200,
+            } as ApiResponse);
+        } catch (error: any) {
+            this.handleError(error, res);
         }
     }
 
     /**
-     * POST /api/auth/change-password - Change password
+     * Refresh token
+     * POST /api/v1/auth/refresh-token
      */
-    async changePassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+    async refreshToken(req: Request, res: Response): Promise<void> {
         try {
-            const { currentPassword, newPassword } = req.body;
-            const userId = (req as any).user?.id;
+            const { refreshToken } = req.body;
 
-            const result = await authService.changePassword(userId, currentPassword, newPassword);
-            res.clearCookie('refreshToken');
-            res.json({ success: true, data: result });
-        } catch (error) {
-            next(error);
+            if (!refreshToken) {
+                res.status(400).json({
+                    success: false,
+                    code: ErrorCode.VALIDATION_ERROR,
+                    message: 'Refresh token is required',
+                    statusCode: 400,
+                } as ApiResponse);
+                return;
+            }
+
+            const result = await this.authService.refreshToken(refreshToken);
+
+            res.status(200).json({
+                success: true,
+                data: result,
+                message: 'Token refreshed successfully',
+                statusCode: 200,
+            } as ApiResponse);
+        } catch (error: any) {
+            this.handleError(error, res);
         }
     }
 
     /**
-     * POST /api/auth/forgot-password - Request password reset
+     * Logout user
+     * POST /api/v1/auth/logout
      */
-    async forgotPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+    async logout(req: Request, res: Response): Promise<void> {
         try {
-            const { email } = req.body;
-            const result = await authService.requestPasswordReset(email);
-            res.json({ success: true, data: result });
-        } catch (error) {
-            next(error);
+            const userId = (req as any).userId;
+            const { refreshToken } = req.body;
+
+            if (!userId) {
+                res.status(401).json({
+                    success: false,
+                    code: ErrorCode.UNAUTHORIZED,
+                    message: 'Unauthorized',
+                    statusCode: 401,
+                } as ApiResponse);
+                return;
+            }
+
+            await this.authService.logout(userId, refreshToken);
+
+            res.status(200).json({
+                success: true,
+                message: 'Logged out successfully',
+                statusCode: 200,
+            } as ApiResponse);
+        } catch (error: any) {
+            this.handleError(error, res);
         }
     }
 
     /**
-     * POST /api/auth/reset-password - Reset password with token
+     * Verify email
+     * GET /api/v1/auth/verify-email/:token
      */
-    async resetPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
-        try {
-            const { token, newPassword } = req.body;
-            const result = await authService.resetPassword(token, newPassword);
-            res.json({ success: true, data: result });
-        } catch (error) {
-            next(error);
-        }
-    }
-
-    /**
-     * GET /api/auth/verify-email/:token - Verify email
-     */
-    async verifyEmail(req: Request, res: Response, next: NextFunction): Promise<void> {
+    async verifyEmail(req: Request, res: Response): Promise<void> {
         try {
             const { token } = req.params;
-            const result = await authService.verifyEmail(token);
-            res.json({ success: true, data: result });
-        } catch (error) {
-            next(error);
+
+            if (!token) {
+                res.status(400).json({
+                    success: false,
+                    code: ErrorCode.VALIDATION_ERROR,
+                    message: 'Verification token is required',
+                    statusCode: 400,
+                } as ApiResponse);
+                return;
+            }
+
+            await this.authService.verifyEmail(token);
+
+            res.status(200).json({
+                success: true,
+                message: 'Email verified successfully',
+                statusCode: 200,
+            } as ApiResponse);
+        } catch (error: any) {
+            this.handleError(error, res);
         }
     }
 
     /**
-     * GET /api/auth/me - Get current user
+     * Request password reset
+     * POST /api/v1/auth/request-password-reset
      */
-    async getCurrentUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+    async requestPasswordReset(req: Request, res: Response): Promise<void> {
         try {
-            res.json({ success: true, data: { user: (req as any).user } });
-        } catch (error) {
-            next(error);
+            const { email } = req.body;
+
+            if (!email) {
+                res.status(400).json({
+                    success: false,
+                    code: ErrorCode.VALIDATION_ERROR,
+                    message: 'Email is required',
+                    statusCode: 400,
+                } as ApiResponse);
+                return;
+            }
+
+            await this.authService.requestPasswordReset(email);
+
+            // Always return success to prevent email enumeration
+            res.status(200).json({
+                success: true,
+                message: 'If the email exists, a password reset link has been sent',
+                statusCode: 200,
+            } as ApiResponse);
+        } catch (error: any) {
+            this.handleError(error, res);
         }
     }
 
     /**
-     * GET /api/auth/sessions - Get active sessions
+     * Reset password
+     * POST /api/v1/auth/reset-password
      */
-    async getActiveSessions(req: Request, res: Response, next: NextFunction): Promise<void> {
+    async resetPassword(req: Request, res: Response): Promise<void> {
         try {
-            const userId = (req as any).user?.id;
-            // TODO: Implement session retrieval from database
-            res.json({ success: true, data: { sessions: [] } });
-        } catch (error) {
-            next(error);
+            const { token, newPassword } = req.body;
+
+            if (!token || !newPassword) {
+                res.status(400).json({
+                    success: false,
+                    code: ErrorCode.VALIDATION_ERROR,
+                    message: 'Token and new password are required',
+                    statusCode: 400,
+                } as ApiResponse);
+                return;
+            }
+
+            await this.authService.resetPassword(token, newPassword);
+
+            res.status(200).json({
+                success: true,
+                message: 'Password reset successfully',
+                statusCode: 200,
+            } as ApiResponse);
+        } catch (error: any) {
+            this.handleError(error, res);
         }
     }
 
     /**
-     * DELETE /api/auth/sessions/:sessionId - Revoke specific session
+     * Change password (authenticated)
+     * POST /api/v1/auth/change-password
      */
-    async revokeSession(req: Request, res: Response, next: NextFunction): Promise<void> {
+    async changePassword(req: Request, res: Response): Promise<void> {
         try {
-            const { sessionId } = req.params;
-            // TODO: Implement session revocation
-            res.json({ success: true, message: 'Session revoked successfully' });
-        } catch (error) {
-            next(error);
+            const userId = (req as any).userId;
+            const { currentPassword, newPassword } = req.body;
+
+            if (!userId) {
+                res.status(401).json({
+                    success: false,
+                    code: ErrorCode.UNAUTHORIZED,
+                    message: 'Unauthorized',
+                    statusCode: 401,
+                } as ApiResponse);
+                return;
+            }
+
+            if (!currentPassword || !newPassword) {
+                res.status(400).json({
+                    success: false,
+                    code: ErrorCode.VALIDATION_ERROR,
+                    message: 'Current password and new password are required',
+                    statusCode: 400,
+                } as ApiResponse);
+                return;
+            }
+
+            await this.authService.changePassword(userId, currentPassword, newPassword);
+
+            res.status(200).json({
+                success: true,
+                message: 'Password changed successfully',
+                statusCode: 200,
+            } as ApiResponse);
+        } catch (error: any) {
+            this.handleError(error, res);
         }
     }
 
     /**
-     * DELETE /api/auth/sessions - Revoke all other sessions
+     * Handle errors and send appropriate response
      */
-    async revokeAllSessions(req: Request, res: Response, next: NextFunction): Promise<void> {
-        try {
-            const userId = (req as any).user?.id;
-            // TODO: Implement revoking all other sessions
-            res.json({ success: true, message: 'All other sessions revoked' });
-        } catch (error) {
-            next(error);
-        }
+    private handleError(error: any, res: Response): void {
+        const code = error.code || ErrorCode.INTERNAL_ERROR;
+        const statusCode = error.statusCode || 500;
+        const message = error.message || 'Internal server error';
+
+        res.status(statusCode).json({
+            success: false,
+            code,
+            message,
+            statusCode,
+            errors: error.errors || [],
+        } as ApiResponse);
     }
 }
-
-export default new AuthController();

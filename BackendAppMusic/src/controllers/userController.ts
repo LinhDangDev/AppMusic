@@ -1,89 +1,231 @@
-import { Request, Response, NextFunction } from 'express';
-import userService from '../services/userService';
-import { createError } from '../utils/error';
+import { Request, Response } from 'express';
+import { UserService } from '../services/userService';
+import { ApiResponse, ErrorCode } from '../types/api.types';
+import { Pool } from 'pg';
 
-class UserController {
-    async getCurrentUser(req: Request, res: Response, next: NextFunction): Promise<void> {
-        try {
-            const userId = (req as any).user?.id || 1;
-            const user = await userService.getUserById(userId);
-            res.json({ success: true, data: user });
-        } catch (error) {
-            next(error);
-        }
+export class UserController {
+    private userService: UserService;
+
+    constructor(pool: Pool) {
+        this.userService = new UserService(pool);
     }
 
-    async updateUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+    /**
+     * Get user profile
+     * GET /api/v1/users/profile
+     */
+    async getProfile(req: Request, res: Response): Promise<void> {
         try {
-            const { name, avatar, favorite_genres, favorite_artists } = req.body;
-            const userId = (req as any).user?.id;
-            const updated = await userService.updateUser(userId, {
-                name,
-                avatar,
-                favorite_genres,
-                favorite_artists
-            });
-            res.json({ success: true, data: updated });
-        } catch (error) {
-            next(error);
-        }
-    }
+            const userId = (req as any).userId;
 
-    async getPlayHistory(req: Request, res: Response, next: NextFunction): Promise<void> {
-        try {
-            const userId = (req as any).user?.id;
-            const limit = parseInt(req.query.limit as string) || 50;
-            const history = await userService.getPlayHistory(userId, limit);
-            res.json({ success: true, data: history });
-        } catch (error) {
-            next(error);
-        }
-    }
-
-    async getFavorites(req: Request, res: Response, next: NextFunction): Promise<void> {
-        try {
-            const userId = (req as any).user?.id || 1;
-            const favorites = await userService.getFavorites(userId);
-            res.json({ success: true, data: favorites });
-        } catch (error) {
-            next(error);
-        }
-    }
-
-    async addToFavorites(req: Request, res: Response, next: NextFunction): Promise<void> {
-        try {
-            const userId = (req as any).user?.id || 1;
-            const musicId = parseInt(req.params.musicId);
-            await userService.addToFavorites(userId, musicId);
-            res.json({ success: true, message: 'Added to favorites' });
-        } catch (error) {
-            next(error);
-        }
-    }
-
-    async removeFromFavorites(req: Request, res: Response, next: NextFunction): Promise<void> {
-        try {
-            const userId = (req as any).user?.id || 1;
-            const musicId = parseInt(req.params.musicId);
-            await userService.removeFromFavorites(userId, musicId);
-            res.json({ success: true, message: 'Removed from favorites' });
-        } catch (error) {
-            next(error);
-        }
-    }
-
-    async getUserById(req: Request, res: Response, next: NextFunction): Promise<void> {
-        try {
-            const userId = parseInt(req.params.id);
-            const user = await userService.getUserById(userId);
-            if (!user) {
-                throw createError('User not found', 404);
+            if (!userId) {
+                res.status(401).json({
+                    success: false,
+                    code: ErrorCode.UNAUTHORIZED,
+                    message: 'Unauthorized',
+                    statusCode: 401,
+                });
+                return;
             }
-            res.json({ success: true, data: user });
-        } catch (error) {
-            next(error);
+
+            const profile = await this.userService.getProfile(userId);
+
+            res.status(200).json({
+                success: true,
+                data: profile,
+                message: 'Profile retrieved successfully',
+                statusCode: 200,
+            });
+        } catch (error: any) {
+            this.handleError(error, res);
         }
+    }
+
+    /**
+     * Update user profile
+     * PUT /api/v1/users/profile
+     */
+    async updateProfile(req: Request, res: Response): Promise<void> {
+        try {
+            const userId = (req as any).userId;
+            const { name, profilePicUrl, favoriteGenres, favoriteArtists } = req.body;
+
+            if (!userId) {
+                res.status(401).json({
+                    success: false,
+                    code: ErrorCode.UNAUTHORIZED,
+                    message: 'Unauthorized',
+                    statusCode: 401,
+                });
+                return;
+            }
+
+            const updatedProfile = await this.userService.updateProfile(userId, {
+                name,
+                profile_pic_url: profilePicUrl,
+                favorite_genres: favoriteGenres,
+                favorite_artists: favoriteArtists,
+            });
+
+            res.status(200).json({
+                success: true,
+                data: updatedProfile,
+                message: 'Profile updated successfully',
+                statusCode: 200,
+            });
+        } catch (error: any) {
+            this.handleError(error, res);
+        }
+    }
+
+    /**
+     * Get user preferences
+     * GET /api/v1/users/preferences
+     */
+    async getPreferences(req: Request, res: Response): Promise<void> {
+        try {
+            const userId = (req as any).userId;
+
+            if (!userId) {
+                res.status(401).json({
+                    success: false,
+                    code: ErrorCode.UNAUTHORIZED,
+                    message: 'Unauthorized',
+                    statusCode: 401,
+                });
+                return;
+            }
+
+            const preferences = await this.userService.getPreferences(userId);
+
+            res.status(200).json({
+                success: true,
+                data: preferences,
+                message: 'Preferences retrieved successfully',
+                statusCode: 200,
+            });
+        } catch (error: any) {
+            this.handleError(error, res);
+        }
+    }
+
+    /**
+     * Update user preferences
+     * PUT /api/v1/users/preferences
+     */
+    async updatePreferences(req: Request, res: Response): Promise<void> {
+        try {
+            const userId = (req as any).userId;
+            const { favoriteGenres, favoriteArtists } = req.body;
+
+            if (!userId) {
+                res.status(401).json({
+                    success: false,
+                    code: ErrorCode.UNAUTHORIZED,
+                    message: 'Unauthorized',
+                    statusCode: 401,
+                });
+                return;
+            }
+
+            const updatedPreferences = await this.userService.updatePreferences(userId, {
+                favorite_genres: favoriteGenres,
+                favorite_artists: favoriteArtists,
+            });
+
+            res.status(200).json({
+                success: true,
+                data: updatedPreferences,
+                message: 'Preferences updated successfully',
+                statusCode: 200,
+            });
+        } catch (error: any) {
+            this.handleError(error, res);
+        }
+    }
+
+    /**
+     * Get user statistics
+     * GET /api/v1/users/stats
+     */
+    async getUserStats(req: Request, res: Response): Promise<void> {
+        try {
+            const userId = (req as any).userId;
+
+            if (!userId) {
+                res.status(401).json({
+                    success: false,
+                    code: ErrorCode.UNAUTHORIZED,
+                    message: 'Unauthorized',
+                    statusCode: 401,
+                });
+                return;
+            }
+
+            const stats = await this.userService.getUserStats(userId);
+
+            res.status(200).json({
+                success: true,
+                data: stats,
+                message: 'Statistics retrieved successfully',
+                statusCode: 200,
+            });
+        } catch (error: any) {
+            this.handleError(error, res);
+        }
+    }
+
+    /**
+     * Deactivate user account
+     * DELETE /api/v1/users/account
+     */
+    async deactivateAccount(req: Request, res: Response): Promise<void> {
+        try {
+            const userId = (req as any).userId;
+            const { password } = req.body;
+
+            if (!userId) {
+                res.status(401).json({
+                    success: false,
+                    code: ErrorCode.UNAUTHORIZED,
+                    message: 'Unauthorized',
+                    statusCode: 401,
+                });
+                return;
+            }
+
+            if (!password) {
+                res.status(400).json({
+                    success: false,
+                    code: ErrorCode.VALIDATION_ERROR,
+                    message: 'Password is required to deactivate account',
+                    statusCode: 400,
+                });
+                return;
+            }
+
+            await this.userService.deactivateAccount(userId);
+
+            res.status(200).json({
+                success: true,
+                message: 'Account deactivated successfully',
+                statusCode: 200,
+            });
+        } catch (error: any) {
+            this.handleError(error, res);
+        }
+    }
+
+    private handleError(error: any, res: Response): void {
+        const code = error.code || ErrorCode.INTERNAL_ERROR;
+        const statusCode = error.statusCode || 500;
+        const message = error.message || 'Internal server error';
+
+        res.status(statusCode).json({
+            success: false,
+            code,
+            message,
+            statusCode,
+        });
     }
 }
-
-export default new UserController();

@@ -1,31 +1,31 @@
-import { Router, Request, Response } from 'express';
-import authRoutes from './authRoutes';
-import userRoutes from './userRoutes';
-import musicRoutes from './musicRoutes';
-import playlistRoutes from './playlistRoutes';
-import artistRoutes from './artistRoutes';
-import genreRoutes from './genreRoutes';
-import rankingRoutes from './rankingRoutes';
+import { Router } from 'express';
+import { Pool } from 'pg';
+import { authMiddleware } from '../middleware/authMiddleware';
 
-const router = Router();
+// Import route factories
+import createAuthRoutes from './authRoutes';
+import createUserRoutes from './userRoutes';
+import createMusicRoutes from './musicRoutes';
+import createPlaylistRoutes from './playlistRoutes';
+import createFavoriteRoutes from './favoriteRoutes';
+import createRankingRoutes from './rankingRoutes';
+import createSearchRoutes from './searchRoutes';
 
-// Health check endpoint - accessible at /api/health
-router.get('/health', (req: Request, res: Response) => {
-    res.json({
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
-        environment: process.env.NODE_ENV || 'development'
-    });
-});
+const createRoutes = (pool: Pool): Router => {
+    const router = Router();
 
-// Mount all route modules
-router.use('/api/auth', authRoutes);
-router.use('/api/users', userRoutes);
-router.use('/api/music', musicRoutes);
-router.use('/api/playlists', playlistRoutes);
-router.use('/api/artists', artistRoutes);
-router.use('/api/genres', genreRoutes);
-router.use('/api/rankings', rankingRoutes);
+    // Public routes
+    router.use('/auth', createAuthRoutes(pool));
+    router.use('/music', createMusicRoutes(pool));
+    router.use('/rankings', createRankingRoutes(pool));
+    router.use('/search', createSearchRoutes(pool));
 
-export default router;
+    // Protected routes (require authentication)
+    router.use('/users', authMiddleware, createUserRoutes(pool));
+    router.use('/playlists', authMiddleware, createPlaylistRoutes(pool));
+    router.use('/favorites', authMiddleware, createFavoriteRoutes(pool));
+
+    return router;
+};
+
+export default createRoutes;

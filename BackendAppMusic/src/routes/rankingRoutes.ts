@@ -1,10 +1,15 @@
 import { Router } from 'express';
-import rankingController from '../controllers/rankingController';
+import { RankingController } from '../controllers/rankingController';
+import { Pool } from 'pg';
 
-const router = Router();
+const createRankingRoutes = (pool: Pool): Router => {
+    const router = Router();
+    const rankingController = new RankingController(pool);
 
-router.get('/platform', rankingController.getRankingsByPlatform);
-router.get('/region', rankingController.getRankingsByRegion);
-router.post('/', rankingController.updateRanking);
+    router.get('/', (req, res) => rankingController.getRankings(req, res));
+    router.get('/trending', (req, res) => rankingController.getTrendingSongs(req, res));
 
-export default router;
+    return router;
+};
+
+export default createRankingRoutes;

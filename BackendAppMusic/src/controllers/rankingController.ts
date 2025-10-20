@@ -1,38 +1,43 @@
-import { Request, Response, NextFunction } from 'express';
-import rankingService from '../services/rankingService';
+import { Request, Response } from 'express';
+import { RankingService } from '../services/rankingService';
+import { ApiResponse, ErrorCode } from '../types/api.types';
+import { Pool } from 'pg';
 
-class RankingController {
-    async getRankingsByPlatform(req: Request, res: Response, next: NextFunction): Promise<void> {
+export class RankingController {
+    private rankingService: RankingService;
+
+    constructor(pool: Pool) {
+        this.rankingService = new RankingService(pool);
+    }
+
+    async getRankings(req: Request, res: Response): Promise<void> {
+        try {
+            const platform = req.query.platform as string;
+            const region = req.query.region as string;
+            const limit = parseInt(req.query.limit as string) || 50;
+
+            const rankings = await this.rankingService.getRankings(platform, region, limit);
+            res.status(200).json({ success: true, data: rankings, message: 'Rankings retrieved', statusCode: 200 });
+        } catch (error: any) {
+            this.handleError(error, res);
+        }
+    }
+
+    async getTrendingSongs(req: Request, res: Response): Promise<void> {
         try {
             const platform = req.query.platform as string;
             const limit = parseInt(req.query.limit as string) || 50;
-            const rankings = await rankingService.getRankingsByPlatform(platform, limit);
-            res.json({ success: true, data: rankings });
-        } catch (error) {
-            next(error);
+
+            const trending = await this.rankingService.getTrendingSongs(platform, limit);
+            res.status(200).json({ success: true, data: trending, message: 'Trending songs retrieved', statusCode: 200 });
+        } catch (error: any) {
+            this.handleError(error, res);
         }
     }
 
-    async getRankingsByRegion(req: Request, res: Response, next: NextFunction): Promise<void> {
-        try {
-            const region = req.query.region as string;
-            const limit = parseInt(req.query.limit as string) || 50;
-            const rankings = await rankingService.getRankingsByRegion(region, limit);
-            res.json({ success: true, data: rankings });
-        } catch (error) {
-            next(error);
-        }
-    }
-
-    async updateRanking(req: Request, res: Response, next: NextFunction): Promise<void> {
-        try {
-            const { musicId, platform, position } = req.body;
-            const ranking = await rankingService.updateRanking(musicId, platform, position);
-            res.json({ success: true, data: ranking });
-        } catch (error) {
-            next(error);
-        }
+    private handleError(error: any, res: Response): void {
+        const code = error.code || ErrorCode.INTERNAL_ERROR;
+        const statusCode = error.statusCode || 500;
+        res.status(statusCode).json({ success: false, code, message: error.message, statusCode });
     }
 }
-
-export default new RankingController();

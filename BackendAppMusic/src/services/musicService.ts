@@ -1,530 +1,506 @@
-import { PoolWithExecute } from '../config/database';
-import { Music, MusicGenre } from '../types/database.types';
-import { createError } from '../utils/error';
-import db from '../config/database';
-import lyricsService from './lyricsService';
+import { Pool } from 'pg';
+import {
+    Music,
+    ErrorCode,
+    PaginationInfo,
+    DatabaseMusic,
+} from '../types/api.types';
 
-/**
- * Music search result interface
- */
-interface MusicSearchResult {
-    items: Music[];
-    total: number;
-    limit: number;
-    offset: number;
-}
+export class MusicService {
+    private pool: Pool;
 
-/**
- * YouTube video metadata
- */
-interface YouTubeVideoMetadata {
-    id: string;
-    title: string;
-    channel?: { name: string };
-    duration: number;
-    thumbnail?: { url: string };
-    views?: number;
-    description?: string;
-    uploadedAt?: string;
-}
-
-/**
- * Genre rule mapping
- */
-interface GenreRules {
-    [key: string]: string[];
-}
-
-/**
- * Music Service - Handles music catalog operations, search, and recommendations
- * Integrates database queries, YouTube search, and lyrics service
- */
-class MusicService {
-    private db: PoolWithExecute = db;
+    constructor(pool: Pool) {
+        this.pool = pool;
+    }
 
     /**
-     * Get all music with pagination and sorting
+     * Get paginated list of music with optional filtering
      */
-    async getAllMusic(limit: number = 20, offset: number = 0, sort: string = 'newest'): Promise<MusicSearchResult> {
-        try {
-            const limitNum = Math.max(1, Math.min(Number(limit) || 20, 100));
-            const offsetNum = Math.max(0, Number(offset) || 0);
+    async getMusic(
+        page: number = 1,
+        limit: number = 20,
+        sort: string = 'created_at',
+        order: 'asc' | 'desc' = 'desc',
+        genreId?: number,
+        artistId?: number
+    ): Promise<{ data: Music.MusicResponse[]; pagination: PaginationInfo }> {
+        // Validate pagination
+        if (page < 1) page = 1;
+        if (limit < 1) limit = 1;
+        if (limit > 100) limit = 100;
 
-            const orderBy = sort === 'popular' ? 'play_count DESC' : 'created_at DESC';
+        // Validate sort field
+        const allowedSorts = ['created_at', 'play_count', 'title'];
+        if (!allowedSorts.includes(sort)) {
+            sort = 'created_at';
+        }
 
-            const [result]: any = await this.db.execute(
-                `SELECT
-          m.id,
-          m.title,
-          m.artist_id,
-          m.album,
-          m.duration,
-          m.release_date,
-          m.youtube_thumbnail,
-          m.youtube_id,
-          m.youtube_url,
-          m.image_url,
-          m.preview_url,
-          m.source,
-          m.source_id,
-          m.play_count,
-          m.lyrics,
-          m.genius_id,
-          m.lyrics_state,
-          m.created_at,
-          m.updated_at,
-          a.name as artist_name,
-          a.image_url as artist_image,
-          (SELECT COUNT(*) FROM favorites f WHERE f.music_id = m.id) as favorite_count,
-          string_agg(DISTINCT g.name, ',') as genres,
-          (SELECT COALESCE(SUM(play_duration), 0) FROM play_history WHERE music_id = m.id) as total_play_duration
-        FROM music m
-        LEFT JOIN artists a ON m.artist_id = a.id
-        LEFT JOIN music_genres mg ON m.id = mg.music_id
-        LEFT JOIN genres g ON mg.genre_id = g.id
-        GROUP BY m.id, a.id, a.name, a.image_url
-        ORDER BY ${orderBy}
-        LIMIT $1 OFFSET $2`,
-                [limitNum, offsetNum]
+        // Validate order
+        if (!['asc', 'desc'].includes(order)) {
+            order = 'desc';
+        }
+
+        const offset = (page - 1) * limit;
+
+        // Build query
+        let whereConditions: string[] = [];
+        const params: any[] = [];
+        let paramCount = 1;
+
+        if (genreId) {
+            whereConditions.push(
+                `m.id IN (SELECT music_id FROM music_genres WHERE genre_id = $${paramCount})`
             );
+            params.push(genreId);
+            paramCount++;
+        }
 
-            // Get total count
-            const [totalResult]: any = await this.db.execute(
-                'SELECT COUNT(*) as total FROM music',
-                []
-            );
+        if (artistId) {
+            whereConditions.push(`m.artist_id = $${paramCount}`);
+            params.push(artistId);
+            paramCount++;
+        }
 
-            const formatted = result.map((row: any) => this.mapRowToMusic(row));
+        const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
-            return {
-                items: formatted,
-                total: parseInt(totalResult[0].total) || 0,
-                limit: limitNum,
-                offset: offsetNum
+        // Get total count
+        const countQuery = `SELECT COUNT(*) as count FROM music m ${whereClause}`;
+        const countResult = await this.pool.query(countQuery, params);
+        const total = parseInt(countResult.rows[0].count);
+        const totalPages = Math.ceil(total / limit);
+
+        // Get data
+        params.push(limit, offset);
+        const dataQuery = `
+      SELECT
+        m.id, m.title, m.artist_id, a.name as artist_name, m.album,
+        m.duration, m.release_date, m.youtube_id, m.image_url,
+        m.play_count, m.created_at
+      FROM music m
+      LEFT JOIN artists a ON m.artist_id = a.id
+      ${whereClause}
+      ORDER BY m.${sort} ${order.toUpperCase()}
+      LIMIT $${paramCount} OFFSET $${paramCount + 1}
+    `;
+
+        const result = await this.pool.query(dataQuery, params);
+
+        return {
+            data: result.rows.map((row) => this.mapRowToMusicResponse(row)),
+            pagination: {
+                page,
+                limit,
+                total,
+                total_pages: totalPages,
+            },
+        };
+    }
+
+    /**
+     * Get single music by ID
+     */
+    async getMusicById(musicId: number): Promise<Music.MusicResponse> {
+        const result = await this.pool.query(
+            `SELECT
+        m.id, m.title, m.artist_id, a.name as artist_name, m.album,
+        m.duration, m.release_date, m.youtube_id, m.image_url,
+        m.play_count, m.created_at
+       FROM music m
+       LEFT JOIN artists a ON m.artist_id = a.id
+       WHERE m.id = $1`,
+            [musicId]
+        );
+
+        if (result.rows.length === 0) {
+            throw {
+                code: ErrorCode.NOT_FOUND,
+                message: 'Music not found',
+                statusCode: 404,
             };
-        } catch (error) {
-            console.error('Error getting all music:', error);
-            throw error;
         }
+
+        return this.mapRowToMusicResponse(result.rows[0]);
     }
 
     /**
-     * Get music by ID with full details
+     * Search music by title, artist, or album
      */
-    async getMusicById(id: number): Promise<Music | null> {
-        try {
-            const [result]: any = await this.db.execute(
-                `SELECT
-          m.id,
-          m.title,
-          m.artist_id,
-          m.album,
-          m.duration,
-          m.release_date,
-          m.youtube_thumbnail,
-          m.youtube_id,
-          m.youtube_url,
-          m.image_url,
-          m.preview_url,
-          m.source,
-          m.source_id,
-          m.play_count,
-          m.lyrics,
-          m.genius_id,
-          m.lyrics_state,
-          m.created_at,
-          m.updated_at,
-          a.name as artist_name,
-          a.image_url as artist_image,
-          (SELECT COUNT(*) FROM favorites f WHERE f.music_id = m.id) as favorite_count
-        FROM music m
-        LEFT JOIN artists a ON m.artist_id = a.id
-        WHERE m.id = $1`,
-                [id]
-            );
-
-            if (!result || result.length === 0) {
-                return null;
-            }
-
-            const music = this.mapRowToMusic(result[0]);
-
-            // Auto-fetch lyrics if pending
-            if (!music.lyrics && music.lyrics_state === 'PENDING') {
-                // Note: Lyrics update is handled separately, here we just skip for now
-                return music;
-            }
-
-            return music;
-        } catch (error) {
-            console.error('Error getting music by id:', error);
-            throw error;
+    async searchMusic(
+        query: string,
+        limit: number = 20,
+        searchType?: 'title' | 'artist' | 'album'
+    ): Promise<{ results: Music.MusicResponse[]; total: number }> {
+        if (!query || query.trim().length === 0) {
+            throw {
+                code: ErrorCode.VALIDATION_ERROR,
+                message: 'Search query cannot be empty',
+                statusCode: 400,
+            };
         }
-    }
 
-    /**
-     * Search music in database
-     */
-    async searchDatabase(query: string, limit: number = 20): Promise<Music[]> {
-        try {
-            const searchQuery = `%${query}%`;
+        if (limit > 100) limit = 100;
 
-            const [result]: any = await this.db.execute(
-                `SELECT
-          m.id,
-          m.title,
-          m.artist_id,
-          m.album,
-          m.duration,
-          m.release_date,
-          m.youtube_thumbnail,
-          m.youtube_id,
-          m.youtube_url,
-          m.image_url,
-          m.preview_url,
-          m.source,
-          m.source_id,
-          m.play_count,
-          m.lyrics,
-          m.genius_id,
-          m.lyrics_state,
-          m.created_at,
-          m.updated_at,
-          a.name as artist_name,
-          a.image_url as artist_image,
-          (SELECT COUNT(*) FROM favorites f WHERE f.music_id = m.id) as favorite_count
+        const searchQuery = `%${query}%`;
+        let sqlQuery: string;
+        const params: any[] = [searchQuery];
+
+        if (searchType === 'title') {
+            sqlQuery = `
+        SELECT
+          m.id, m.title, m.artist_id, a.name as artist_name, m.album,
+          m.duration, m.release_date, m.youtube_id, m.image_url,
+          m.play_count, m.created_at
         FROM music m
         LEFT JOIN artists a ON m.artist_id = a.id
-        WHERE m.title ILIKE $1 OR a.name ILIKE $2
+        WHERE LOWER(m.title) LIKE LOWER($1)
         ORDER BY m.play_count DESC
-        LIMIT $3`,
-                [searchQuery, searchQuery, limit]
-            );
-
-            return result.map((row: any) => this.mapRowToMusic(row));
-        } catch (error) {
-            console.error('Database search error:', error);
-            return [];
-        }
-    }
-
-    /**
-     * Get music by artist
-     */
-    async getMusicByArtist(artistId: number, limit: number = 20): Promise<Music[]> {
-        try {
-            const [result]: any = await this.db.execute(
-                `SELECT
-          m.id,
-          m.title,
-          m.artist_id,
-          m.album,
-          m.duration,
-          m.release_date,
-          m.youtube_thumbnail,
-          m.youtube_id,
-          m.youtube_url,
-          m.image_url,
-          m.preview_url,
-          m.source,
-          m.source_id,
-          m.play_count,
-          m.lyrics,
-          m.genius_id,
-          m.lyrics_state,
-          m.created_at,
-          m.updated_at,
-          a.name as artist_name,
-          a.image_url as artist_image,
-          (SELECT COUNT(*) FROM favorites f WHERE f.music_id = m.id) as favorite_count
+        LIMIT $2
+      `;
+            params.push(limit);
+        } else if (searchType === 'artist') {
+            sqlQuery = `
+        SELECT
+          m.id, m.title, m.artist_id, a.name as artist_name, m.album,
+          m.duration, m.release_date, m.youtube_id, m.image_url,
+          m.play_count, m.created_at
         FROM music m
         LEFT JOIN artists a ON m.artist_id = a.id
-        WHERE m.artist_id = $1
-        ORDER BY m.release_date DESC
-        LIMIT $2`,
-                [artistId, limit]
-            );
-
-            return result.map((row: any) => this.mapRowToMusic(row));
-        } catch (error) {
-            console.error('Error getting music by artist:', error);
-            return [];
-        }
-    }
-
-    /**
-     * Get music by genres (multi-genre filtering)
-     */
-    async getMusicByGenres(genreIds: number[], limit: number = 20): Promise<Music[]> {
-        try {
-            if (genreIds.length === 0) {
-                return [];
-            }
-
-            const [result]: any = await this.db.execute(
-                `SELECT DISTINCT
-          m.id,
-          m.title,
-          m.artist_id,
-          m.album,
-          m.duration,
-          m.release_date,
-          m.youtube_thumbnail,
-          m.youtube_id,
-          m.youtube_url,
-          m.image_url,
-          m.preview_url,
-          m.source,
-          m.source_id,
-          m.play_count,
-          m.lyrics,
-          m.genius_id,
-          m.lyrics_state,
-          m.created_at,
-          m.updated_at,
-          a.name as artist_name,
-          a.image_url as artist_image,
-          (SELECT COUNT(*) FROM favorites f WHERE f.music_id = m.id) as favorite_count
-        FROM music m
-        LEFT JOIN artists a ON m.artist_id = a.id
-        LEFT JOIN music_genres mg ON m.id = mg.music_id
-        WHERE mg.genre_id = ANY($1)
+        WHERE LOWER(a.name) LIKE LOWER($1)
         ORDER BY m.play_count DESC
-        LIMIT $2`,
-                [genreIds, limit]
-            );
+        LIMIT $2
+      `;
+            params.push(limit);
+        } else if (searchType === 'album') {
+            sqlQuery = `
+        SELECT
+          m.id, m.title, m.artist_id, a.name as artist_name, m.album,
+          m.duration, m.release_date, m.youtube_id, m.image_url,
+          m.play_count, m.created_at
+        FROM music m
+        LEFT JOIN artists a ON m.artist_id = a.id
+        WHERE LOWER(m.album) LIKE LOWER($1)
+        ORDER BY m.play_count DESC
+        LIMIT $2
+      `;
+            params.push(limit);
+        } else {
+            // Full-text search across all fields
+            sqlQuery = `
+        SELECT
+          m.id, m.title, m.artist_id, a.name as artist_name, m.album,
+          m.duration, m.release_date, m.youtube_id, m.image_url,
+          m.play_count, m.created_at
+        FROM music m
+        LEFT JOIN artists a ON m.artist_id = a.id
+        WHERE LOWER(m.title) LIKE LOWER($1)
+          OR LOWER(a.name) LIKE LOWER($1)
+          OR LOWER(m.album) LIKE LOWER($1)
+        ORDER BY m.play_count DESC
+        LIMIT $2
+      `;
+            params.push(limit);
+        }
 
-            return result.map((row: any) => this.mapRowToMusic(row));
-        } catch (error) {
-            console.error('Error getting music by genres:', error);
-            return [];
+        const result = await this.pool.query(sqlQuery, params);
+
+        // Get total count
+        let countQuery: string;
+        if (searchType === 'title') {
+            countQuery = `SELECT COUNT(*) as count FROM music WHERE LOWER(title) LIKE LOWER($1)`;
+        } else if (searchType === 'artist') {
+            countQuery = `SELECT COUNT(*) as count FROM music m JOIN artists a ON m.artist_id = a.id WHERE LOWER(a.name) LIKE LOWER($1)`;
+        } else if (searchType === 'album') {
+            countQuery = `SELECT COUNT(*) as count FROM music WHERE LOWER(album) LIKE LOWER($1)`;
+        } else {
+            countQuery = `
+        SELECT COUNT(*) as count FROM music m
+        LEFT JOIN artists a ON m.artist_id = a.id
+        WHERE LOWER(m.title) LIKE LOWER($1)
+          OR LOWER(a.name) LIKE LOWER($1)
+          OR LOWER(m.album) LIKE LOWER($1)
+      `;
+        }
+
+        const countResult = await this.pool.query(countQuery, [searchQuery]);
+        const total = parseInt(countResult.rows[0].count);
+
+        return {
+            results: result.rows.map((row) => this.mapRowToMusicResponse(row)),
+            total,
+        };
+    }
+
+    /**
+     * Create new music (admin only)
+     */
+    async createMusic(payload: Music.CreateMusicRequest): Promise<Music.MusicResponse> {
+        // Validate required fields
+        if (!payload.title || payload.title.trim().length === 0) {
+            throw {
+                code: ErrorCode.VALIDATION_ERROR,
+                message: 'Title is required',
+                statusCode: 400,
+            };
+        }
+
+        if (!payload.artist_id) {
+            throw {
+                code: ErrorCode.VALIDATION_ERROR,
+                message: 'Artist ID is required',
+                statusCode: 400,
+            };
+        }
+
+        if (!payload.duration || payload.duration < 0) {
+            throw {
+                code: ErrorCode.VALIDATION_ERROR,
+                message: 'Duration must be a positive number',
+                statusCode: 400,
+            };
+        }
+
+        // Verify artist exists
+        const artistResult = await this.pool.query('SELECT id FROM artists WHERE id = $1', [
+            payload.artist_id,
+        ]);
+
+        if (artistResult.rows.length === 0) {
+            throw {
+                code: ErrorCode.NOT_FOUND,
+                message: 'Artist not found',
+                statusCode: 404,
+            };
+        }
+
+        // Insert music
+        const result = await this.pool.query(
+            `INSERT INTO music (title, artist_id, album, duration, release_date, youtube_id, image_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, title, artist_id, album, duration, release_date, youtube_id, image_url, play_count, created_at`,
+            [
+                payload.title,
+                payload.artist_id,
+                payload.album || null,
+                payload.duration,
+                payload.release_date || null,
+                payload.youtube_id || null,
+                payload.image_url || null,
+            ]
+        );
+
+        const music = result.rows[0];
+
+        // Get artist name
+        const artistNameResult = await this.pool.query('SELECT name FROM artists WHERE id = $1', [
+            payload.artist_id,
+        ]);
+
+        return {
+            id: music.id,
+            title: music.title,
+            artist_id: music.artist_id,
+            artist_name: artistNameResult.rows[0].name,
+            album: music.album,
+            duration: music.duration,
+            release_date: music.release_date,
+            youtube_id: music.youtube_id,
+            image_url: music.image_url,
+            play_count: music.play_count,
+            created_at: music.created_at,
+        };
+    }
+
+    /**
+     * Update music (admin only)
+     */
+    async updateMusic(
+        musicId: number,
+        payload: Music.UpdateMusicRequest
+    ): Promise<Music.MusicResponse> {
+        // Verify music exists
+        const musicResult = await this.pool.query('SELECT * FROM music WHERE id = $1', [musicId]);
+
+        if (musicResult.rows.length === 0) {
+            throw {
+                code: ErrorCode.NOT_FOUND,
+                message: 'Music not found',
+                statusCode: 404,
+            };
+        }
+
+        // Build update query
+        const updates: string[] = [];
+        const values: any[] = [];
+        let paramCount = 1;
+
+        if (payload.title) {
+            updates.push(`title = $${paramCount}`);
+            values.push(payload.title);
+            paramCount++;
+        }
+
+        if (payload.album !== undefined) {
+            updates.push(`album = $${paramCount}`);
+            values.push(payload.album || null);
+            paramCount++;
+        }
+
+        if (payload.duration !== undefined) {
+            updates.push(`duration = $${paramCount}`);
+            values.push(payload.duration);
+            paramCount++;
+        }
+
+        if (payload.release_date !== undefined) {
+            updates.push(`release_date = $${paramCount}`);
+            values.push(payload.release_date || null);
+            paramCount++;
+        }
+
+        if (payload.image_url !== undefined) {
+            updates.push(`image_url = $${paramCount}`);
+            values.push(payload.image_url || null);
+            paramCount++;
+        }
+
+        if (updates.length === 0) {
+            return this.getMusicById(musicId);
+        }
+
+        updates.push(`updated_at = NOW()`);
+        values.push(musicId);
+
+        const query = `
+      UPDATE music
+      SET ${updates.join(', ')}
+      WHERE id = $${paramCount}
+      RETURNING id, title, artist_id, album, duration, release_date, youtube_id, image_url, play_count, created_at
+    `;
+
+        const updateResult = await this.pool.query(query, values);
+        const music = updateResult.rows[0];
+
+        // Get artist name
+        const artistResult = await this.pool.query('SELECT name FROM artists WHERE id = $1', [
+            music.artist_id,
+        ]);
+
+        return {
+            id: music.id,
+            title: music.title,
+            artist_id: music.artist_id,
+            artist_name: artistResult.rows[0].name,
+            album: music.album,
+            duration: music.duration,
+            release_date: music.release_date,
+            youtube_id: music.youtube_id,
+            image_url: music.image_url,
+            play_count: music.play_count,
+            created_at: music.created_at,
+        };
+    }
+
+    /**
+     * Delete music (admin only)
+     */
+    async deleteMusic(musicId: number): Promise<void> {
+        const result = await this.pool.query('DELETE FROM music WHERE id = $1 RETURNING id', [
+            musicId,
+        ]);
+
+        if (result.rows.length === 0) {
+            throw {
+                code: ErrorCode.NOT_FOUND,
+                message: 'Music not found',
+                statusCode: 404,
+            };
         }
     }
 
     /**
-     * Update play count for a music
+     * Increment play count
      */
-    async updatePlayCount(musicId: number, increment: number = 1): Promise<void> {
-        try {
-            await this.db.execute(
-                `UPDATE music
-         SET play_count = play_count + $1, updated_at = NOW()
-         WHERE id = $2`,
-                [increment, musicId]
-            );
-        } catch (error) {
-            console.error('Error updating play count:', error);
-            throw error;
+    async incrementPlayCount(musicId: number): Promise<void> {
+        const result = await this.pool.query(
+            'UPDATE music SET play_count = play_count + 1 WHERE id = $1 RETURNING id',
+            [musicId]
+        );
+
+        if (result.rows.length === 0) {
+            throw {
+                code: ErrorCode.NOT_FOUND,
+                message: 'Music not found',
+                statusCode: 404,
+            };
         }
     }
 
     /**
      * Get top music by play count
      */
-    async getTopMusic(limit: number = 10): Promise<Music[]> {
-        try {
-            const [result]: any = await this.db.execute(
-                `SELECT
-          m.id,
-          m.title,
-          m.artist_id,
-          m.album,
-          m.duration,
-          m.release_date,
-          m.youtube_thumbnail,
-          m.youtube_id,
-          m.youtube_url,
-          m.image_url,
-          m.preview_url,
-          m.source,
-          m.source_id,
-          m.play_count,
-          m.lyrics,
-          m.genius_id,
-          m.lyrics_state,
-          m.created_at,
-          m.updated_at,
-          a.name as artist_name,
-          a.image_url as artist_image,
-          (SELECT COUNT(*) FROM favorites f WHERE f.music_id = m.id) as favorite_count
-        FROM music m
-        LEFT JOIN artists a ON m.artist_id = a.id
-        WHERE m.youtube_url IS NOT NULL
-        ORDER BY m.play_count DESC
-        LIMIT $1`,
-                [limit]
-            );
+    async getTopMusic(limit: number = 50): Promise<Music.MusicResponse[]> {
+        if (limit > 1000) limit = 1000;
 
-            return result.map((row: any) => this.mapRowToMusic(row));
-        } catch (error) {
-            console.error('Error getting top music:', error);
-            return [];
-        }
+        const result = await this.pool.query(
+            `SELECT
+        m.id, m.title, m.artist_id, a.name as artist_name, m.album,
+        m.duration, m.release_date, m.youtube_id, m.image_url,
+        m.play_count, m.created_at
+       FROM music m
+       LEFT JOIN artists a ON m.artist_id = a.id
+       ORDER BY m.play_count DESC
+       LIMIT $1`,
+            [limit]
+        );
+
+        return result.rows.map((row) => this.mapRowToMusicResponse(row));
     }
 
     /**
-     * Get random music (for recommendations)
+     * Get total music count
      */
-    async getRandomMusic(limit: number = 10): Promise<Music[]> {
-        try {
-            const [result]: any = await this.db.execute(
-                `SELECT
-          m.id,
-          m.title,
-          m.artist_id,
-          m.album,
-          m.duration,
-          m.release_date,
-          m.youtube_thumbnail,
-          m.youtube_id,
-          m.youtube_url,
-          m.image_url,
-          m.preview_url,
-          m.source,
-          m.source_id,
-          m.play_count,
-          m.lyrics,
-          m.genius_id,
-          m.lyrics_state,
-          m.created_at,
-          m.updated_at,
-          a.name as artist_name,
-          a.image_url as artist_image,
-          string_agg(DISTINCT g.name, ',') as genres,
-          (SELECT COUNT(*) FROM favorites f WHERE f.music_id = m.id) as favorite_count
-        FROM music m
-        LEFT JOIN artists a ON m.artist_id = a.id
-        LEFT JOIN music_genres mg ON m.id = mg.music_id
-        LEFT JOIN genres g ON mg.genre_id = g.id
-        WHERE m.youtube_url IS NOT NULL AND m.youtube_thumbnail IS NOT NULL
-        GROUP BY m.id, a.id, a.name, a.image_url
-        ORDER BY RANDOM()
-        LIMIT $1`,
-                [limit]
-            );
-
-            return result.map((row: any) => this.mapRowToMusic(row));
-        } catch (error) {
-            console.error('Error getting random music:', error);
-            return [];
-        }
+    async getTotalMusicCount(): Promise<number> {
+        const result = await this.pool.query('SELECT COUNT(*) as count FROM music');
+        return parseInt(result.rows[0].count);
     }
 
     /**
-     * Classify genres based on title and artist name
+     * Get music by genre
      */
-    private async classifyGenres(title: string = '', artist: string = ''): Promise<any[]> {
-        try {
-            const text = `${title} ${artist}`.toLowerCase();
-            const genreRules: GenreRules = {
-                'Romance': ['love', 'heart', 'romantic', 'yêu', 'tình yêu', 'valentine'],
-                'Sad': ['sad', 'buồn', 'lonely', 'alone', 'cry', 'khóc', 'nước mắt'],
-                'Party': ['party', 'dance', 'club', 'remix', 'edm'],
-                'K-Pop': ['k-pop', 'kpop', 'korean', 'korea', 'bts', 'blackpink'],
-                'Hip-Hop': ['rap', 'hip hop', 'hip-hop', 'trap'],
-                'Chill': ['chill', 'relax', 'acoustic'],
-                'Pop': ['pop', 'nhạc trẻ'],
-                'Dance & Electronic': ['edm', 'electronic', 'dance'],
-                'Indie & Alternative': ['indie', 'alternative'],
-                'R&B & Soul': ['r&b', 'soul', 'rhythm and blues']
-            };
+    async getMusicByGenre(genreId: number, limit: number = 20): Promise<Music.MusicResponse[]> {
+        const result = await this.pool.query(
+            `SELECT
+        m.id, m.title, m.artist_id, a.name as artist_name, m.album,
+        m.duration, m.release_date, m.youtube_id, m.image_url,
+        m.play_count, m.created_at
+       FROM music m
+       LEFT JOIN artists a ON m.artist_id = a.id
+       JOIN music_genres mg ON m.id = mg.music_id
+       WHERE mg.genre_id = $1
+       ORDER BY m.play_count DESC
+       LIMIT $2`,
+            [genreId, limit]
+        );
 
-            const matchedGenres: string[] = [];
-
-            // Find matching genres
-            for (const [genre, keywords] of Object.entries(genreRules)) {
-                if (keywords.some(keyword => text.includes(keyword))) {
-                    matchedGenres.push(genre);
-                }
-            }
-
-            // Default to Pop if no match
-            if (matchedGenres.length === 0) {
-                matchedGenres.push('Pop');
-            }
-
-            // Get genre IDs from database
-            const [genreRows]: any = await this.db.execute(
-                `SELECT id, name FROM genres WHERE name = ANY($1)`,
-                [matchedGenres]
-            );
-
-            return genreRows;
-        } catch (error) {
-            console.error('Error classifying genres:', error);
-            return [];
-        }
+        return result.rows.map((row) => this.mapRowToMusicResponse(row));
     }
 
     /**
-     * Search on YouTube (stub - requires youtube-sr package)
+     * Helper: Map database row to MusicResponse
      */
-    async searchYouTube(query: string, limit: number = 10): Promise<any[]> {
-        try {
-            // NOTE: This requires the youtube-sr package which needs to be installed
-            console.log(`YouTube search for: "${query}" (limit: ${limit})`);
-            // Return empty for now - would integrate youtube-sr here
-            return [];
-        } catch (error) {
-            console.error('YouTube search error:', error);
-            return [];
-        }
-    }
-
-    /**
-     * Combined search across database and external sources
-     */
-    async searchAll(query: string, limit: number = 20): Promise<Music[]> {
-        try {
-            // Search database
-            const dbResults = await this.searchDatabase(query, Math.floor(limit / 2));
-
-            // Search YouTube (would be integrated)
-            const youtubeResults = await this.searchYouTube(query, Math.ceil(limit / 2));
-
-            // Combine results (prioritize database, then add YouTube)
-            const combinedResults = [...dbResults, ...youtubeResults];
-
-            // Sort by play count descending
-            combinedResults.sort((a: any, b: any) => (b.play_count || 0) - (a.play_count || 0));
-
-            return combinedResults.slice(0, limit);
-        } catch (error) {
-            console.error('Search error:', error);
-            return [];
-        }
-    }
-
-    // ============================================
-    // PRIVATE MAPPING METHOD
-    // ============================================
-
-    /**
-     * Map database row to Music interface
-     */
-    private mapRowToMusic(row: any): Music {
+    private mapRowToMusicResponse(row: any): Music.MusicResponse {
         return {
             id: row.id,
             title: row.title,
             artist_id: row.artist_id,
+            artist_name: row.artist_name || 'Unknown Artist',
             album: row.album,
             duration: row.duration,
-            release_date: row.release_date ? new Date(row.release_date) : undefined,
-            youtube_thumbnail: row.youtube_thumbnail,
+            release_date: row.release_date,
             youtube_id: row.youtube_id,
-            youtube_url: row.youtube_url,
             image_url: row.image_url,
-            preview_url: row.preview_url,
-            source: row.source,
-            source_id: row.source_id,
             play_count: row.play_count || 0,
-            lyrics: row.lyrics,
-            genius_id: row.genius_id,
-            lyrics_state: row.lyrics_state,
-            created_at: new Date(row.created_at),
-            updated_at: new Date(row.updated_at)
+            created_at: row.created_at,
         };
     }
 }
-
-export default new MusicService();

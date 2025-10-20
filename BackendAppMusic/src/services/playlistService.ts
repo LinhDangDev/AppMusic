@@ -1,218 +1,374 @@
-import { PoolWithExecute } from '../config/database';
-import { Playlist, Music, PlaylistSong } from '../types/database.types';
-import { createError } from '../utils/error';
-import db from '../config/database';
+import { Pool } from 'pg';
+import {
+    Playlist,
+    Music,
+    ErrorCode,
+    DatabasePlaylist,
+} from '../types/api.types';
 
-/**
- * Playlist with songs information
- */
-interface PlaylistWithSongs {
-    playlist: Playlist;
-    songs: PlaylistSongDetail[];
-    total: number;
-}
+export class PlaylistService {
+    private pool: Pool;
 
-/**
- * Detailed playlist song for API response
- */
-interface PlaylistSongDetail {
-    id: number;
-    title: string;
-    duration?: number;
-    play_count: number;
-    image_url?: string;
-    preview_url?: string;
-    youtube_url?: string;
-    youtube_thumbnail?: string;
-    artist: { name?: string; image_url?: string };
-    genres: string[];
-    added_at: Date;
-}
-
-/**
- * Playlist Service - Handles user playlists, songs management
- * Supports transaction-based operations for data consistency
- */
-class PlaylistService {
-    private db: PoolWithExecute = db;
+    constructor(pool: Pool) {
+        this.pool = pool;
+    }
 
     /**
      * Get all playlists for a user
      */
-    async getUserPlaylists(userId: number): Promise<any[]> {
-        try {
-            const [rows]: any = await this.db.execute(
-                `SELECT
-          p.id,
-          p.user_id,
-          p.name,
-          p.description,
-          p.is_shared,
-          p.created_at,
-          p.updated_at,
-          COUNT(ps.music_id) as song_count
-        FROM playlists p
-        LEFT JOIN playlist_songs ps ON p.id = ps.playlist_id
-        WHERE p.user_id = $1
-        GROUP BY p.id, p.user_id, p.name, p.description, p.is_shared, p.created_at, p.updated_at
-        ORDER BY p.created_at DESC`,
-                [userId]
-            );
+    async getUserPlaylists(userId: number): Promise<Playlist.PlaylistResponse[]> {
+        const result = await this.pool.query(
+            `SELECT
+        p.id, p.user_id, p.name, p.description, p.is_shared,
+        COUNT(ps.music_id) as songs_count,
+        p.created_at, p.updated_at
+       FROM playlists p
+       LEFT JOIN playlist_songs ps ON p.id = ps.playlist_id
+       WHERE p.user_id = $1
+       GROUP BY p.id, p.user_id, p.name, p.description, p.is_shared, p.created_at, p.updated_at
+       ORDER BY p.created_at DESC`,
+            [userId]
+        );
 
-            return rows.map((row: any) => ({
-                id: row.id,
-                user_id: row.user_id,
-                name: row.name,
-                description: row.description,
-                is_shared: row.is_shared,
-                song_count: parseInt(row.song_count) || 0,
-                created_at: new Date(row.created_at),
-                updated_at: new Date(row.updated_at)
-            }));
-        } catch (error) {
-            console.error('Error getting user playlists:', error);
-            throw error;
+        return result.rows.map((row) => this.mapRowToPlaylistResponse(row));
+    }
+
+    /**
+     * Get single playlist by ID
+     */
+    async getPlaylistById(playlistId: number): Promise<Playlist.PlaylistDetailResponse> {
+        // Get playlist info
+        const playlistResult = await this.pool.query(
+            `SELECT
+        p.id, p.user_id, p.name, p.description, p.is_shared,
+        COUNT(ps.music_id) as songs_count,
+        p.created_at, p.updated_at
+       FROM playlists p
+       LEFT JOIN playlist_songs ps ON p.id = ps.playlist_id
+       WHERE p.id = $1
+       GROUP BY p.id, p.user_id, p.name, p.description, p.is_shared, p.created_at, p.updated_at`,
+            [playlistId]
+        );
+
+        if (playlistResult.rows.length === 0) {
+            throw {
+                code: ErrorCode.NOT_FOUND,
+                message: 'Playlist not found',
+                statusCode: 404,
+            };
         }
+
+        const playlist = playlistResult.rows[0];
+
+        // Get songs in playlist
+        const songsResult = await this.pool.query(
+            `SELECT
+        m.id, m.title, m.artist_id, a.name as artist_name, m.album,
+        m.duration, m.release_date, m.youtube_id, m.image_url,
+        m.play_count, m.created_at,
+        ps.position
+       FROM playlist_songs ps
+       JOIN music m ON ps.music_id = m.id
+       LEFT JOIN artists a ON m.artist_id = a.id
+       WHERE ps.playlist_id = $1
+       ORDER BY ps.position ASC`,
+            [playlistId]
+        );
+
+        return {
+            id: playlist.id,
+            user_id: playlist.user_id,
+            name: playlist.name,
+            description: playlist.description,
+            is_shared: playlist.is_shared,
+            songs_count: parseInt(playlist.songs_count),
+            created_at: playlist.created_at,
+            updated_at: playlist.updated_at,
+            songs: songsResult.rows.map((row) => ({
+                id: row.id,
+                title: row.title,
+                artist_id: row.artist_id,
+                artist_name: row.artist_name || 'Unknown Artist',
+                album: row.album,
+                duration: row.duration,
+                release_date: row.release_date,
+                youtube_id: row.youtube_id,
+                image_url: row.image_url,
+                play_count: row.play_count,
+                created_at: row.created_at,
+            })),
+        };
     }
 
     /**
      * Create new playlist
      */
     async createPlaylist(
-        name: string,
-        description: string = '',
-        userId: number
-    ): Promise<Playlist> {
-        try {
-            const [result]: any = await this.db.execute(
-                `INSERT INTO playlists (user_id, name, description, created_at, updated_at)
-         VALUES ($1, $2, $3, NOW(), NOW())
-         RETURNING *`,
-                [userId, name, description]
-            );
-
-            if (!result || result.length === 0) {
-                throw createError('Failed to create playlist', 500);
-            }
-
-            return this.mapRowToPlaylist(result[0]);
-        } catch (error) {
-            console.error('Error creating playlist:', error);
-            throw error;
+        userId: number,
+        payload: Playlist.CreatePlaylistRequest
+    ): Promise<Playlist.PlaylistResponse> {
+        // Validate name
+        if (!payload.name || payload.name.trim().length === 0) {
+            throw {
+                code: ErrorCode.VALIDATION_ERROR,
+                message: 'Playlist name is required',
+                statusCode: 400,
+            };
         }
+
+        if (payload.name.length > 100) {
+            throw {
+                code: ErrorCode.VALIDATION_ERROR,
+                message: 'Playlist name cannot exceed 100 characters',
+                statusCode: 400,
+            };
+        }
+
+        if (payload.description && payload.description.length > 500) {
+            throw {
+                code: ErrorCode.VALIDATION_ERROR,
+                message: 'Description cannot exceed 500 characters',
+                statusCode: 400,
+            };
+        }
+
+        const result = await this.pool.query(
+            `INSERT INTO playlists (user_id, name, description, is_shared)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, user_id, name, description, is_shared, created_at, updated_at`,
+            [userId, payload.name, payload.description || null, payload.is_shared || false]
+        );
+
+        const playlist = result.rows[0];
+
+        return {
+            id: playlist.id,
+            user_id: playlist.user_id,
+            name: playlist.name,
+            description: playlist.description,
+            is_shared: playlist.is_shared,
+            songs_count: 0,
+            created_at: playlist.created_at,
+            updated_at: playlist.updated_at,
+        };
     }
 
     /**
-     * Get playlist by ID
-     */
-    async getPlaylistById(playlistId: number): Promise<Playlist | null> {
-        try {
-            const [rows]: any = await this.db.execute(
-                'SELECT * FROM playlists WHERE id = $1',
-                [playlistId]
-            );
-
-            if (!rows || rows.length === 0) {
-                return null;
-            }
-
-            return this.mapRowToPlaylist(rows[0]);
-        } catch (error) {
-            console.error('Error getting playlist by id:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Update playlist metadata
+     * Update playlist
      */
     async updatePlaylist(
         playlistId: number,
-        data: { name?: string; description?: string; is_shared?: boolean }
-    ): Promise<Playlist | null> {
-        try {
-            // Verify playlist exists
-            const existing = await this.getPlaylistById(playlistId);
-            if (!existing) {
-                throw createError('Playlist not found', 404);
-            }
+        userId: number,
+        payload: Playlist.UpdatePlaylistRequest
+    ): Promise<Playlist.PlaylistResponse> {
+        // Verify ownership
+        const ownershipResult = await this.pool.query(
+            'SELECT user_id FROM playlists WHERE id = $1',
+            [playlistId]
+        );
 
-            const updates: string[] = [];
-            const values: any[] = [];
-            let paramCount = 1;
-
-            if (data.name !== undefined) {
-                updates.push(`name = $${paramCount++}`);
-                values.push(data.name);
-            }
-            if (data.description !== undefined) {
-                updates.push(`description = $${paramCount++}`);
-                values.push(data.description);
-            }
-            if (data.is_shared !== undefined) {
-                updates.push(`is_shared = $${paramCount++}`);
-                values.push(data.is_shared);
-            }
-
-            if (updates.length === 0) {
-                return existing;
-            }
-
-            updates.push(`updated_at = NOW()`);
-            values.push(playlistId);
-
-            const query = `UPDATE playlists SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`;
-
-            const [result]: any = await this.db.execute(query, values);
-
-            if (!result || result.length === 0) {
-                return null;
-            }
-
-            return this.mapRowToPlaylist(result[0]);
-        } catch (error) {
-            console.error('Error updating playlist:', error);
-            throw error;
+        if (ownershipResult.rows.length === 0) {
+            throw {
+                code: ErrorCode.NOT_FOUND,
+                message: 'Playlist not found',
+                statusCode: 404,
+            };
         }
+
+        if (ownershipResult.rows[0].user_id !== userId) {
+            throw {
+                code: ErrorCode.FORBIDDEN,
+                message: 'You do not have permission to update this playlist',
+                statusCode: 403,
+            };
+        }
+
+        // Build update query
+        const updates: string[] = [];
+        const values: any[] = [];
+        let paramCount = 1;
+
+        if (payload.name) {
+            if (payload.name.length > 100) {
+                throw {
+                    code: ErrorCode.VALIDATION_ERROR,
+                    message: 'Playlist name cannot exceed 100 characters',
+                    statusCode: 400,
+                };
+            }
+            updates.push(`name = $${paramCount}`);
+            values.push(payload.name);
+            paramCount++;
+        }
+
+        if (payload.description !== undefined) {
+            if (payload.description && payload.description.length > 500) {
+                throw {
+                    code: ErrorCode.VALIDATION_ERROR,
+                    message: 'Description cannot exceed 500 characters',
+                    statusCode: 400,
+                };
+            }
+            updates.push(`description = $${paramCount}`);
+            values.push(payload.description || null);
+            paramCount++;
+        }
+
+        if (payload.is_shared !== undefined) {
+            updates.push(`is_shared = $${paramCount}`);
+            values.push(payload.is_shared);
+            paramCount++;
+        }
+
+        if (updates.length === 0) {
+            // Return current playlist if no updates
+            const currentResult = await this.pool.query(
+                `SELECT
+          p.id, p.user_id, p.name, p.description, p.is_shared,
+          COUNT(ps.music_id) as songs_count,
+          p.created_at, p.updated_at
+         FROM playlists p
+         LEFT JOIN playlist_songs ps ON p.id = ps.playlist_id
+         WHERE p.id = $1
+         GROUP BY p.id`,
+                [playlistId]
+            );
+
+            const playlist = currentResult.rows[0];
+            return this.mapRowToPlaylistResponse(playlist);
+        }
+
+        updates.push(`updated_at = NOW()`);
+        values.push(playlistId);
+
+        const query = `
+      UPDATE playlists
+      SET ${updates.join(', ')}
+      WHERE id = $${paramCount}
+      RETURNING id, user_id, name, description, is_shared, created_at, updated_at
+    `;
+
+        const result = await this.pool.query(query, values);
+        const playlist = result.rows[0];
+
+        // Get songs count
+        const countResult = await this.pool.query(
+            'SELECT COUNT(*) as count FROM playlist_songs WHERE playlist_id = $1',
+            [playlistId]
+        );
+
+        return {
+            id: playlist.id,
+            user_id: playlist.user_id,
+            name: playlist.name,
+            description: playlist.description,
+            is_shared: playlist.is_shared,
+            songs_count: parseInt(countResult.rows[0].count),
+            created_at: playlist.created_at,
+            updated_at: playlist.updated_at,
+        };
     }
 
     /**
      * Delete playlist
      */
-    async deletePlaylist(playlistId: number): Promise<void> {
-        try {
-            await this.db.execute(
-                'DELETE FROM playlists WHERE id = $1',
-                [playlistId]
-            );
-        } catch (error) {
-            console.error('Error deleting playlist:', error);
-            throw error;
+    async deletePlaylist(playlistId: number, userId: number): Promise<void> {
+        // Verify ownership
+        const ownershipResult = await this.pool.query(
+            'SELECT user_id FROM playlists WHERE id = $1',
+            [playlistId]
+        );
+
+        if (ownershipResult.rows.length === 0) {
+            throw {
+                code: ErrorCode.NOT_FOUND,
+                message: 'Playlist not found',
+                statusCode: 404,
+            };
         }
+
+        if (ownershipResult.rows[0].user_id !== userId) {
+            throw {
+                code: ErrorCode.FORBIDDEN,
+                message: 'You do not have permission to delete this playlist',
+                statusCode: 403,
+            };
+        }
+
+        // Delete playlist (cascade will delete songs)
+        await this.pool.query('DELETE FROM playlists WHERE id = $1', [playlistId]);
     }
 
     /**
-     * Add song to playlist with auto-incremented position
+     * Add song to playlist
      */
-    async addSongToPlaylist(playlistId: number, musicId: number): Promise<void> {
+    async addSong(
+        playlistId: number,
+        userId: number,
+        musicId: number
+    ): Promise<void> {
+        // Verify ownership
+        const ownershipResult = await this.pool.query(
+            'SELECT user_id FROM playlists WHERE id = $1',
+            [playlistId]
+        );
+
+        if (ownershipResult.rows.length === 0) {
+            throw {
+                code: ErrorCode.NOT_FOUND,
+                message: 'Playlist not found',
+                statusCode: 404,
+            };
+        }
+
+        if (ownershipResult.rows[0].user_id !== userId) {
+            throw {
+                code: ErrorCode.FORBIDDEN,
+                message: 'You do not have permission to modify this playlist',
+                statusCode: 403,
+            };
+        }
+
+        // Verify music exists
+        const musicResult = await this.pool.query('SELECT id FROM music WHERE id = $1', [musicId]);
+
+        if (musicResult.rows.length === 0) {
+            throw {
+                code: ErrorCode.NOT_FOUND,
+                message: 'Music not found',
+                statusCode: 404,
+            };
+        }
+
+        // Get next position
+        const positionResult = await this.pool.query(
+            'SELECT MAX(position) as max_position FROM playlist_songs WHERE playlist_id = $1',
+            [playlistId]
+        );
+
+        const nextPosition = (positionResult.rows[0].max_position || 0) + 1;
+
+        // Add song
         try {
-            // Get next position
-            const [maxResult]: any = await this.db.execute(
-                'SELECT MAX(position) as max_position FROM playlist_songs WHERE playlist_id = $1',
-                [playlistId]
-            );
-
-            const nextPosition = (maxResult[0]?.max_position || 0) + 1;
-
-            // Add song with new position
-            await this.db.execute(
-                `INSERT INTO playlist_songs (playlist_id, music_id, position, added_at)
-         VALUES ($1, $2, $3, NOW())
-         ON CONFLICT (playlist_id, music_id) DO NOTHING`,
+            await this.pool.query(
+                `INSERT INTO playlist_songs (playlist_id, music_id, position)
+         VALUES ($1, $2, $3)`,
                 [playlistId, musicId, nextPosition]
             );
-        } catch (error) {
-            console.error('Error adding song to playlist:', error);
+
+            // Update playlist updated_at
+            await this.pool.query('UPDATE playlists SET updated_at = NOW() WHERE id = $1', [
+                playlistId,
+            ]);
+        } catch (error: any) {
+            if (error.code === '23505') {
+                // Unique constraint violation
+                throw {
+                    code: ErrorCode.CONFLICT,
+                    message: 'Song already in playlist',
+                    statusCode: 409,
+                };
+            }
             throw error;
         }
     }
@@ -220,123 +376,104 @@ class PlaylistService {
     /**
      * Remove song from playlist
      */
-    async removeSongFromPlaylist(playlistId: number, musicId: number): Promise<void> {
-        try {
-            await this.db.execute(
-                'DELETE FROM playlist_songs WHERE playlist_id = $1 AND music_id = $2',
-                [playlistId, musicId]
-            );
-        } catch (error) {
-            console.error('Error removing song from playlist:', error);
-            throw error;
-        }
-    }
+    async removeSong(playlistId: number, userId: number, musicId: number): Promise<void> {
+        // Verify ownership
+        const ownershipResult = await this.pool.query(
+            'SELECT user_id FROM playlists WHERE id = $1',
+            [playlistId]
+        );
 
-    /**
-     * Get all songs in a playlist with full details
-     */
-    async getPlaylistSongs(playlistId: number): Promise<PlaylistWithSongs> {
-        try {
-            // Verify playlist exists
-            const playlist = await this.getPlaylistById(playlistId);
-            if (!playlist) {
-                throw createError('Playlist not found', 404);
-            }
-
-            // Get songs in playlist
-            const [songs]: any = await this.db.execute(
-                `SELECT
-          m.id,
-          m.title,
-          m.duration,
-          m.play_count,
-          m.image_url,
-          m.preview_url,
-          m.youtube_url,
-          m.youtube_thumbnail,
-          a.name as artist_name,
-          a.image_url as artist_image,
-          ps.added_at,
-          string_agg(DISTINCT g.name, ',') as genres
-        FROM playlist_songs ps
-        JOIN music m ON ps.music_id = m.id
-        LEFT JOIN artists a ON m.artist_id = a.id
-        LEFT JOIN music_genres mg ON m.id = mg.music_id
-        LEFT JOIN genres g ON mg.genre_id = g.id
-        WHERE ps.playlist_id = $1
-        GROUP BY m.id, a.id, a.name, a.image_url, ps.added_at
-        ORDER BY ps.added_at DESC`,
-                [playlistId]
-            );
-
-            const formatted: PlaylistSongDetail[] = songs.map((song: any) => ({
-                id: song.id,
-                title: song.title,
-                duration: song.duration,
-                play_count: song.play_count || 0,
-                image_url: song.image_url,
-                preview_url: song.preview_url,
-                youtube_url: song.youtube_url,
-                youtube_thumbnail: song.youtube_thumbnail,
-                artist: {
-                    name: song.artist_name,
-                    image_url: song.artist_image
-                },
-                genres: song.genres ? song.genres.split(',') : [],
-                added_at: new Date(song.added_at)
-            }));
-
-            return {
-                playlist,
-                songs: formatted,
-                total: formatted.length
+        if (ownershipResult.rows.length === 0) {
+            throw {
+                code: ErrorCode.NOT_FOUND,
+                message: 'Playlist not found',
+                statusCode: 404,
             };
-        } catch (error) {
-            console.error('Error getting playlist songs:', error);
-            throw error;
         }
+
+        if (ownershipResult.rows[0].user_id !== userId) {
+            throw {
+                code: ErrorCode.FORBIDDEN,
+                message: 'You do not have permission to modify this playlist',
+                statusCode: 403,
+            };
+        }
+
+        // Remove song
+        const result = await this.pool.query(
+            'DELETE FROM playlist_songs WHERE playlist_id = $1 AND music_id = $2 RETURNING position',
+            [playlistId, musicId]
+        );
+
+        if (result.rows.length === 0) {
+            throw {
+                code: ErrorCode.NOT_FOUND,
+                message: 'Song not in playlist',
+                statusCode: 404,
+            };
+        }
+
+        // Update playlist updated_at
+        await this.pool.query('UPDATE playlists SET updated_at = NOW() WHERE id = $1', [
+            playlistId,
+        ]);
+
+        // Reorder remaining songs
+        const deletedPosition = result.rows[0].position;
+        await this.pool.query(
+            `UPDATE playlist_songs
+       SET position = position - 1
+       WHERE playlist_id = $1 AND position > $2`,
+            [playlistId, deletedPosition]
+        );
     }
 
     /**
-     * Reorder song in playlist
+     * Get shared playlists
      */
-    async reorderPlaylistSong(
-        playlistId: number,
-        musicId: number,
-        newPosition: number
-    ): Promise<void> {
-        try {
-            // Update position
-            await this.db.execute(
-                `UPDATE playlist_songs
-         SET position = $1
-         WHERE playlist_id = $2 AND music_id = $3`,
-                [newPosition, playlistId, musicId]
-            );
-        } catch (error) {
-            console.error('Error reordering playlist song:', error);
-            throw error;
-        }
+    async getSharedPlaylists(limit: number = 50): Promise<Playlist.PlaylistResponse[]> {
+        const result = await this.pool.query(
+            `SELECT
+        p.id, p.user_id, p.name, p.description, p.is_shared,
+        COUNT(ps.music_id) as songs_count,
+        p.created_at, p.updated_at
+       FROM playlists p
+       LEFT JOIN playlist_songs ps ON p.id = ps.playlist_id
+       WHERE p.is_shared = true
+       GROUP BY p.id, p.user_id, p.name, p.description, p.is_shared, p.created_at, p.updated_at
+       ORDER BY p.created_at DESC
+       LIMIT $1`,
+            [limit]
+        );
+
+        return result.rows.map((row) => this.mapRowToPlaylistResponse(row));
     }
 
-    // ============================================
-    // PRIVATE MAPPING METHOD
-    // ============================================
+    /**
+     * Get playlist count for user
+     */
+    async getUserPlaylistCount(userId: number): Promise<number> {
+        const result = await this.pool.query(
+            'SELECT COUNT(*) as count FROM playlists WHERE user_id = $1',
+            [userId]
+        );
+
+        return parseInt(result.rows[0].count);
+    }
 
     /**
-     * Map database row to Playlist interface
+     * Helper: Map database row to PlaylistResponse
      */
-    private mapRowToPlaylist(row: any): Playlist {
+    private mapRowToPlaylistResponse(row: any): Playlist.PlaylistResponse {
         return {
             id: row.id,
             user_id: row.user_id,
             name: row.name,
             description: row.description,
-            is_shared: row.is_shared || false,
-            created_at: new Date(row.created_at),
-            updated_at: new Date(row.updated_at)
+            is_shared: row.is_shared,
+            songs_count: parseInt(row.songs_count) || 0,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
         };
     }
 }
-
-export default new PlaylistService();

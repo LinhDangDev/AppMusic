@@ -1,115 +1,396 @@
-import { PoolWithExecute } from '../config/database';
-import { Ranking } from '../types/database.types';
-import db from '../config/database';
+import { Pool } from 'pg';
+import { Ranking, Music, ErrorCode } from '../types/api.types';
 
-class RankingService {
-    private db: PoolWithExecute = db;
+export class RankingService {
+    private pool: Pool;
 
-    async getRankingsByPlatform(platform: string, limit: number = 50): Promise<Ranking[]> {
-        try {
-            const [rows]: any = await this.db.execute(
-                `SELECT r.*, m.title, a.name as artist_name
-         FROM rankings r
-         JOIN music m ON r.music_id = m.id
-         LEFT JOIN artists a ON m.artist_id = a.id
-         WHERE r.platform = $1
-         ORDER BY r.rank_position ASC
-         LIMIT $2`,
-                [platform, limit]
-            );
-            return rows.map((row: any) => this.mapRowToRanking(row));
-        } catch (error) {
-            console.error('Error getting rankings:', error);
-            throw error;
-        }
+    constructor(pool: Pool) {
+        this.pool = pool;
     }
 
-    async getRankingsByRegion(region: string, limit: number = 50): Promise<any[]> {
-        try {
-            // Normalize region to uppercase for consistency
-            const normalizedRegion = region.toUpperCase();
+    /**
+     * Get rankings with filtering
+     */
+    async getRankings(
+        platform?: string,
+        region?: string,
+        limit: number = 50
+    ): Promise<Ranking.RankingResponse[]> {
+        if (limit > 1000) limit = 1000;
 
-            const [rows]: any = await this.db.execute(
-                `SELECT
-                    r.id,
-                    r.rank_position,
-                    r.position,
-                    r.region,
-                    r.ranking_date,
-                    r.created_at,
-                    r.updated_at,
-                    m.id as music_id,
-                    m.title,
-                    m.artist_id,
-                    a.name as artist_name,
-                    m.youtube_id,
-                    m.youtube_thumbnail,
-                    m.youtube_url,
-                    m.duration,
-                    m.play_count
-                FROM rankings r
-                JOIN music m ON r.music_id = m.id
-                LEFT JOIN artists a ON m.artist_id = a.id
-                WHERE UPPER(r.region) = $1
-                ORDER BY r.rank_position ASC
-                LIMIT $2`,
-                [normalizedRegion, limit]
-            );
+        let query = `
+      SELECT
+        r.id, r.rank_position, r.music_id, r.platform, r.region,
+        r.ranking_date, m.title, a.name as artist_name
+       FROM rankings r
+       JOIN music m ON r.music_id = m.id
+       LEFT JOIN artists a ON m.artist_id = a.id
+       WHERE 1=1
+    `;
 
-            return rows.map((row: any) => ({
-                id: row.id,
-                rank_position: row.rank_position,
-                position: row.position || row.rank_position,
-                region: row.region,
-                ranking_date: row.ranking_date,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-                music_id: row.music_id,
-                title: row.title || 'Unknown',
-                artist_id: row.artist_id,
-                artist_name: row.artist_name || 'Unknown Artist',
-                youtube_id: row.youtube_id,
-                youtube_thumbnail: row.youtube_thumbnail,
-                youtube_url: row.youtube_url,
-                duration: row.duration,
-                play_count: row.play_count || 0
-            }));
-        } catch (error) {
-            console.error('Error getting regional rankings:', error);
-            return [];
+        const params: any[] = [];
+        let paramCount = 1;
+
+        if (platform) {
+            query += ` AND r.platform = $${paramCount}`;
+            params.push(platform);
+            paramCount++;
         }
-    }
 
-    async updateRanking(musicId: number, platform: string, position: number): Promise<Ranking | null> {
-        try {
-            const [result]: any = await this.db.execute(
-                `INSERT INTO rankings (platform, music_id, rank_position, ranking_date, created_at, updated_at)
-         VALUES ($1, $2, $3, CURRENT_DATE, NOW(), NOW())
-         ON CONFLICT (platform, music_id, ranking_date)
-         DO UPDATE SET rank_position = $3, updated_at = NOW()
-         RETURNING *`,
-                [platform, musicId, position]
-            );
-            return result.length > 0 ? this.mapRowToRanking(result[0]) : null;
-        } catch (error) {
-            console.error('Error updating ranking:', error);
-            throw error;
+        if (region) {
+            query += ` AND r.region = $${paramCount}`;
+            params.push(region);
+            paramCount++;
         }
-    }
 
-    private mapRowToRanking(row: any): Ranking {
-        return {
+        query += `
+      ORDER BY r.ranking_date DESC, r.rank_position ASC
+      LIMIT $${paramCount}
+    `;
+        params.push(limit);
+
+        const result = await this.pool.query(query, params);
+
+        return result.rows.map((row) => ({
             id: row.id,
+            rank_position: row.rank_position,
+            music_id: row.music_id,
+            title: row.title,
+            artist_name: row.artist_name || 'Unknown Artist',
             platform: row.platform,
             region: row.region,
-            music_id: row.music_id,
+            ranking_date: row.ranking_date,
+        }));
+    }
+
+    /**
+     * Get rankings by specific date
+     */
+    async getRankingsByDate(
+        date: string,
+        platform?: string,
+        region?: string,
+        limit: number = 50
+    ): Promise<Ranking.RankingResponse[]> {
+        if (limit > 1000) limit = 1000;
+
+        let query = `
+      SELECT
+        r.id, r.rank_position, r.music_id, r.platform, r.region,
+        r.ranking_date, m.title, a.name as artist_name
+       FROM rankings r
+       JOIN music m ON r.music_id = m.id
+       LEFT JOIN artists a ON m.artist_id = a.id
+       WHERE r.ranking_date = $1
+    `;
+
+        const params: any[] = [date];
+        let paramCount = 2;
+
+        if (platform) {
+            query += ` AND r.platform = $${paramCount}`;
+            params.push(platform);
+            paramCount++;
+        }
+
+        if (region) {
+            query += ` AND r.region = $${paramCount}`;
+            params.push(region);
+            paramCount++;
+        }
+
+        query += `
+      ORDER BY r.rank_position ASC
+      LIMIT $${paramCount}
+    `;
+        params.push(limit);
+
+        const result = await this.pool.query(query, params);
+
+        return result.rows.map((row) => ({
+            id: row.id,
             rank_position: row.rank_position,
-            position: row.position,
-            ranking_date: new Date(row.ranking_date),
-            created_at: new Date(row.created_at),
-            updated_at: new Date(row.updated_at)
+            music_id: row.music_id,
+            title: row.title,
+            artist_name: row.artist_name || 'Unknown Artist',
+            platform: row.platform,
+            region: row.region,
+            ranking_date: row.ranking_date,
+        }));
+    }
+
+    /**
+     * Get top rankings
+     */
+    async getTopRankings(limit: number = 50): Promise<Ranking.RankingResponse[]> {
+        if (limit > 1000) limit = 1000;
+
+        const result = await this.pool.query(
+            `SELECT
+        r.id, r.rank_position, r.music_id, r.platform, r.region,
+        r.ranking_date, m.title, a.name as artist_name
+       FROM rankings r
+       JOIN music m ON r.music_id = m.id
+       LEFT JOIN artists a ON m.artist_id = a.id
+       WHERE r.rank_position <= 100
+       ORDER BY r.ranking_date DESC, r.rank_position ASC
+       LIMIT $1`,
+            [limit]
+        );
+
+        return result.rows.map((row) => ({
+            id: row.id,
+            rank_position: row.rank_position,
+            music_id: row.music_id,
+            title: row.title,
+            artist_name: row.artist_name || 'Unknown Artist',
+            platform: row.platform,
+            region: row.region,
+            ranking_date: row.ranking_date,
+        }));
+    }
+
+    /**
+     * Get music ranking history
+     */
+    async getMusicRankingHistory(musicId: number, platform?: string): Promise<Ranking.RankingResponse[]> {
+        let query = `
+      SELECT
+        r.id, r.rank_position, r.music_id, r.platform, r.region,
+        r.ranking_date, m.title, a.name as artist_name
+       FROM rankings r
+       JOIN music m ON r.music_id = m.id
+       LEFT JOIN artists a ON m.artist_id = a.id
+       WHERE r.music_id = $1
+    `;
+
+        const params: any[] = [musicId];
+        let paramCount = 2;
+
+        if (platform) {
+            query += ` AND r.platform = $${paramCount}`;
+            params.push(platform);
+            paramCount++;
+        }
+
+        query += ` ORDER BY r.ranking_date DESC, r.rank_position ASC`;
+
+        const result = await this.pool.query(query, params);
+
+        return result.rows.map((row) => ({
+            id: row.id,
+            rank_position: row.rank_position,
+            music_id: row.music_id,
+            title: row.title,
+            artist_name: row.artist_name || 'Unknown Artist',
+            platform: row.platform,
+            region: row.region,
+            ranking_date: row.ranking_date,
+        }));
+    }
+
+    /**
+     * Get available platforms
+     */
+    async getAvailablePlatforms(): Promise<string[]> {
+        const result = await this.pool.query(
+            'SELECT DISTINCT platform FROM rankings ORDER BY platform'
+        );
+
+        return result.rows.map((row) => row.platform);
+    }
+
+    /**
+     * Get available regions
+     */
+    async getAvailableRegions(platform?: string): Promise<string[]> {
+        let query = 'SELECT DISTINCT region FROM rankings WHERE region IS NOT NULL';
+        const params: any[] = [];
+
+        if (platform) {
+            query += ` AND platform = $1`;
+            params.push(platform);
+        }
+
+        query += ` ORDER BY region`;
+
+        const result = await this.pool.query(query, params);
+
+        return result.rows.map((row) => row.region).filter((r) => r !== null);
+    }
+
+    /**
+     * Get ranking statistics
+     */
+    async getRankingStats(): Promise<{
+        total_rankings: number;
+        platforms: string[];
+        regions: string[];
+        latest_date: string;
+    }> {
+        // Total rankings
+        const totalResult = await this.pool.query('SELECT COUNT(*) as count FROM rankings');
+        const totalRankings = parseInt(totalResult.rows[0].count);
+
+        // Platforms
+        const platformsResult = await this.pool.query(
+            'SELECT DISTINCT platform FROM rankings ORDER BY platform'
+        );
+        const platforms = platformsResult.rows.map((row) => row.platform);
+
+        // Regions
+        const regionsResult = await this.pool.query(
+            'SELECT DISTINCT region FROM rankings WHERE region IS NOT NULL ORDER BY region'
+        );
+        const regions = regionsResult.rows.map((row) => row.region);
+
+        // Latest date
+        const latestResult = await this.pool.query(
+            'SELECT MAX(ranking_date) as latest_date FROM rankings'
+        );
+        const latestDate = latestResult.rows[0].latest_date;
+
+        return {
+            total_rankings: totalRankings,
+            platforms,
+            regions,
+            latest_date: latestDate || '',
         };
     }
-}
 
-export default new RankingService();
+    /**
+     * Get artist ranking position
+     */
+    async getArtistRankingPosition(artistId: number, platform?: string): Promise<{
+        position: number;
+        count: number;
+    }> {
+        let query = `
+      SELECT
+        MIN(r.rank_position) as best_position,
+        COUNT(DISTINCT r.music_id) as song_count
+       FROM rankings r
+       JOIN music m ON r.music_id = m.id
+       WHERE m.artist_id = $1
+    `;
+
+        const params: any[] = [artistId];
+        let paramCount = 2;
+
+        if (platform) {
+            query += ` AND r.platform = $${paramCount}`;
+            params.push(platform);
+            paramCount++;
+        }
+
+        const result = await this.pool.query(query, params);
+
+        return {
+            position: result.rows[0].best_position || 0,
+            count: parseInt(result.rows[0].song_count) || 0,
+        };
+    }
+
+    /**
+     * Insert ranking (for admin/batch operations)
+     */
+    async insertRanking(
+        musicId: number,
+        platform: string,
+        rankPosition: number,
+        region?: string,
+        rankingDate?: string
+    ): Promise<void> {
+        // Verify music exists
+        const musicResult = await this.pool.query('SELECT id FROM music WHERE id = $1', [musicId]);
+
+        if (musicResult.rows.length === 0) {
+            throw {
+                code: ErrorCode.NOT_FOUND,
+                message: 'Music not found',
+                statusCode: 404,
+            };
+        }
+
+        // Validate rank position
+        if (rankPosition < 1 || rankPosition > 10000) {
+            throw {
+                code: ErrorCode.VALIDATION_ERROR,
+                message: 'Rank position must be between 1 and 10000',
+                statusCode: 400,
+            };
+        }
+
+        const finalDate = rankingDate || new Date().toISOString().split('T')[0];
+
+        try {
+            await this.pool.query(
+                `INSERT INTO rankings (music_id, platform, region, rank_position, ranking_date)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (platform, music_id, ranking_date)
+         DO UPDATE SET rank_position = $4, region = $3`,
+                [musicId, platform, region || null, rankPosition, finalDate]
+            );
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    /**
+     * Get trending songs (biggest rank improvements)
+     */
+    async getTrendingSongs(platform?: string, limit: number = 50): Promise<any[]> {
+        if (limit > 1000) limit = 1000;
+
+        let query = `
+      SELECT
+        m.id, m.title, a.name as artist_name,
+        r1.rank_position as current_position,
+        r2.rank_position as previous_position,
+        (r2.rank_position - r1.rank_position) as improvement,
+        r1.ranking_date,
+        r1.platform
+       FROM rankings r1
+       JOIN music m ON r1.music_id = m.id
+       LEFT JOIN artists a ON m.artist_id = a.id
+       LEFT JOIN rankings r2 ON r1.music_id = r2.music_id
+         AND r1.platform = r2.platform
+         AND r2.ranking_date < r1.ranking_date
+         AND r2.ranking_date = (
+           SELECT MAX(ranking_date) FROM rankings r3
+           WHERE r3.music_id = r1.music_id
+             AND r3.platform = r1.platform
+             AND r3.ranking_date < r1.ranking_date
+         )
+       WHERE 1=1
+    `;
+
+        const params: any[] = [];
+        let paramCount = 1;
+
+        if (platform) {
+            query += ` AND r1.platform = $${paramCount}`;
+            params.push(platform);
+            paramCount++;
+        }
+
+        query += `
+      ORDER BY improvement DESC NULLS LAST
+      LIMIT $${paramCount}
+    `;
+        params.push(limit);
+
+        const result = await this.pool.query(query, params);
+
+        return result.rows.map((row) => ({
+            music_id: row.id,
+            title: row.title,
+            artist_name: row.artist_name || 'Unknown Artist',
+            current_position: row.current_position,
+            previous_position: row.previous_position,
+            improvement: row.improvement,
+            ranking_date: row.ranking_date,
+            platform: row.platform,
+        }));
+    }
+}

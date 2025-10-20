@@ -1,15 +1,19 @@
 import { Router } from 'express';
-import userController from '../controllers/userController';
-import { authenticateToken } from '../middleware/authMiddleware';
+import { UserController } from '../controllers/userController';
+import { Pool } from 'pg';
 
-const router = Router();
+const createUserRoutes = (pool: Pool): Router => {
+    const router = Router();
+    const userController = new UserController(pool);
 
-router.get('/me', authenticateToken, userController.getCurrentUser);
-router.put('/me', authenticateToken, userController.updateUser);
-router.get('/me/history', authenticateToken, userController.getPlayHistory);
-router.get('/me/favorites', authenticateToken, userController.getFavorites);
-router.post('/me/favorites/:musicId', authenticateToken, userController.addToFavorites);
-router.delete('/me/favorites/:musicId', authenticateToken, userController.removeFromFavorites);
-router.get('/:id', userController.getUserById);
+    router.get('/profile', (req, res) => userController.getProfile(req, res));
+    router.put('/profile', (req, res) => userController.updateProfile(req, res));
+    router.get('/preferences', (req, res) => userController.getPreferences(req, res));
+    router.put('/preferences', (req, res) => userController.updatePreferences(req, res));
+    router.get('/stats', (req, res) => userController.getUserStats(req, res));
+    router.delete('/account', (req, res) => userController.deactivateAccount(req, res));
 
-export default router;
+    return router;
+};
+
+export default createUserRoutes;

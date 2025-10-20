@@ -1,16 +1,20 @@
 import { Router } from 'express';
-import playlistController from '../controllers/playlistController';
-import { authenticateToken } from '../middleware/authMiddleware';
+import { PlaylistController } from '../controllers/playlistController';
+import { Pool } from 'pg';
 
-const router = Router();
+const createPlaylistRoutes = (pool: Pool): Router => {
+  const router = Router();
+  const playlistController = new PlaylistController(pool);
 
-router.get('/', authenticateToken, playlistController.getUserPlaylists);
-router.post('/', authenticateToken, playlistController.createPlaylist);
-router.get('/:id', playlistController.getPlaylistById);
-router.get('/:id/songs', playlistController.getPlaylistSongs);
-router.put('/:id', authenticateToken, playlistController.updatePlaylist);
-router.delete('/:id', authenticateToken, playlistController.deletePlaylist);
-router.post('/:id/songs', authenticateToken, playlistController.addSongToPlaylist);
-router.delete('/:id/songs/:musicId', authenticateToken, playlistController.removeSongFromPlaylist);
+  router.get('/', (req, res) => playlistController.getUserPlaylists(req, res));
+  router.post('/', (req, res) => playlistController.createPlaylist(req, res));
+  router.get('/:id', (req, res) => playlistController.getPlaylistById(req, res));
+  router.put('/:id', (req, res) => playlistController.updatePlaylist(req, res));
+  router.delete('/:id', (req, res) => playlistController.deletePlaylist(req, res));
+  router.post('/:id/songs', (req, res) => playlistController.addSong(req, res));
+  router.delete('/:id/songs/:musicId', (req, res) => playlistController.removeSong(req, res));
 
-export default router;
+  return router;
+};
+
+export default createPlaylistRoutes;
