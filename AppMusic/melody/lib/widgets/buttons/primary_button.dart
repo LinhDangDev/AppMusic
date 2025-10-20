@@ -23,6 +23,9 @@ class PrimaryButton extends StatefulWidget {
   /// Button width (defaults to full width)
   final double? width;
 
+  /// Whether button should take full width
+  final bool fullWidth;
+
   /// Button height (defaults to 48px)
   final double height;
 
@@ -46,6 +49,7 @@ class PrimaryButton extends StatefulWidget {
     this.isDisabled = false,
     this.icon,
     this.width,
+    this.fullWidth = false,
     this.height = 48,
     this.backgroundColor,
     this.textColor,
@@ -101,7 +105,7 @@ class _PrimaryButtonState extends State<PrimaryButton>
               parent: _animationController, curve: Curves.easeInOut),
         ),
         child: SizedBox(
-          width: widget.width ?? double.infinity,
+          width: widget.fullWidth ? double.infinity : (widget.width ?? null),
           height: widget.height,
           child: ElevatedButton(
             onPressed: isActive ? widget.onPressed : null,
