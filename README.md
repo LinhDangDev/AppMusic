@@ -247,40 +247,7 @@ python billboardcrawl.py
 python itunes.py
 ```
 
----
 
-## 🗄️ Database Schema
-
-### Core Tables
-
-```sql
--- Music table
-CREATE TABLE Music (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  title VARCHAR(255) NOT NULL,
-  artist_name VARCHAR(255),
-  youtube_url VARCHAR(500),
-  youtube_thumbnail VARCHAR(500),
-  play_count INT DEFAULT 0,
-  duration INT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Rankings table
-CREATE TABLE Rankings (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  music_id INT,
-  region VARCHAR(10),
-  position INT,
-  chart_date DATE,
-  source VARCHAR(50),
-  FOREIGN KEY (music_id) REFERENCES Music(id)
-);
-
--- Playlists & other tables...
-```
-
-Xem full schema tại: [`BackendAppMusic/init/init.sql`](BackendAppMusic/init/init.sql)
 
 ---
 
@@ -428,7 +395,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [x] Playlist management
 
 ### 🚧 Phase 2: Enhancement (In Progress)
-- [ ] Firebase Authentication
 - [ ] User profiles
 - [ ] Social features
 - [ ] Lyrics integration
@@ -451,7 +417,7 @@ This app is for **educational purposes only**. All music content is streamed dir
 
 <div align="center">
 
-**Made with ❤️ by the AppMusic Team**
+**Made with ❤️ by the Linh Dang**
 
 [⬆ Back to top](#-appmusic---music-streaming-platform)
 
